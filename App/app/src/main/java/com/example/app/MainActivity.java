@@ -1,7 +1,9 @@
 package com.example.app;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
 
+import android.Manifest;
 import android.os.Bundle;
 
 public class MainActivity extends AppCompatActivity {

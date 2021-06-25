@@ -9,7 +9,17 @@
 
     <RelativeLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent">
+        android:layout_height="match_parent"
+        android:padding="15dp">
+
+        <ImageView
+            android:layout_width="15dp"
+            android:layout_height="15dp"
+            android:layout_centerVertical="true"
+            android:src="@drawable/ic_question_mark"
+            app:tint="@color/link"
+            android:id="@+id/permissionDescriptionBtn"
+            android:clickable="true"/>
 
         <TextView
             android:layout_width="wrap_content"
@@ -19,16 +29,16 @@
             android:textSize="15sp"
             android:textStyle="bold"
             android:layout_centerVertical="true"
-            android:id="@+id/permissionNameText"/>
+            android:id="@+id/permissionNameText"
+            android:layout_toRightOf="@id/permissionDescriptionBtn"/>
 
         <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/permissionGrantedSwitch"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_toEndOf="@+id/permissionNameText"
             android:layout_alignParentEnd="true"
-            android:layout_marginEnd="15dp"
             android:layout_centerVertical="true"
-            android:id="@+id/permissionGrantedSwitch"/>
+            android:clickable="false"/>
     </RelativeLayout>
 
 </com.google.android.material.card.MaterialCardView>
