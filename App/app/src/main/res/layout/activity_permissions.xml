@@ -11,19 +11,18 @@
         android:text="Droid Communicator needs the following permissions!"
         android:layout_centerHorizontal="true"
         android:textAlignment="center"
-        android:textSize="20sp"
-        android:textStyle="bold"
         android:layout_marginTop="40dp"
-        android:id="@+id/needPermissionsTextView"/>
+        android:id="@+id/needPermissionsTextView"
+        style="@style/BigText" />
 
     <View
         android:layout_width="300dp"
-        android:layout_height="1dp"
-        android:background="@color/white"
+        android:id="@+id/horizontalLine"
+        android:layout_height="3dp"
         android:layout_below="@id/needPermissionsTextView"
         android:layout_centerHorizontal="true"
-        android:layout_marginTop="15dp"
-        android:id="@+id/horizontalLine"/>
+        android:layout_marginTop="10dp"
+        android:background="@color/design_default_color_primary" />
 
     <androidx.recyclerview.widget.RecyclerView
         android:layout_width="300dp"
@@ -38,11 +37,11 @@
         android:layout_height="wrap_content"
         android:text="Skip"
         android:clickable="true"
-        android:textSize="20sp"
         android:layout_margin="20dp"
         android:layout_alignParentEnd="true"
         android:layout_alignParentBottom="true"
-        android:textColor="@color/link"/>
+        android:id="@+id/skipBtn"
+        style="@style/TextButtonOnWhite" />
 
 
 </RelativeLayout>
