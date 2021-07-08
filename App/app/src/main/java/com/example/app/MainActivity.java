@@ -30,6 +30,8 @@ import java.util.Set;
 
 public class MainActivity extends AppCompatActivity {
 
+    private Utils utils;
+
     private DrawerLayout menuDrawer;
     private TextView noPairText;
     private Button pairBtn;
@@ -38,12 +40,13 @@ public class MainActivity extends AppCompatActivity {
     private RecyclerView pcRecView;
     private PCRecViewAdapter pcRecViewAdapter;
     private LinearLayoutManager pcRecViewLayoutManager;
-    private ArrayList<ConnectedPC> connectedPCS;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        utils = Utils.getInstance(this);
 
         menuDrawer = findViewById(R.id.drawerLayout);
         ImageButton menuOpenBtn = findViewById(R.id.menuOpenBtn);
@@ -51,7 +54,6 @@ public class MainActivity extends AppCompatActivity {
         noPairText = findViewById(R.id.noPairText);
         pcListLayout = findViewById(R.id.pcListLayout);
         unpairedLayout = findViewById(R.id.unpairedLayout);
-        connectedPCS = new ArrayList<>();
 
         menuOpenBtn.setOnClickListener(v -> {
             Animation rotate = AnimationUtils.loadAnimation(MainActivity.this,
@@ -72,15 +74,16 @@ public class MainActivity extends AppCompatActivity {
         });
 
         // Thread used to check for bluetooth capabilities and handle devices.
-        BluetoothHandler bluetoothHandler = new BluetoothHandler(this);
+        BluetoothThread bluetoothHandler = new BluetoothThread(this);
         bluetoothHandler.start();
 
         // Initialize the pcRecView
         pcRecView = findViewById(R.id.pcRecView);
-        pcRecViewAdapter = new PCRecViewAdapter(MainActivity.this, connectedPCS);
         pcRecViewLayoutManager = new LinearLayoutManager(
                 MainActivity.this, LinearLayoutManager.VERTICAL,
                 false);
+        pcRecViewAdapter = new PCRecViewAdapter(MainActivity.this, pcRecViewLayoutManager,
+                utils.getConnectedPCS());
         pcRecView.setLayoutManager(pcRecViewLayoutManager);
         pcRecView.setAdapter(pcRecViewAdapter);
     }
@@ -90,7 +93,7 @@ public class MainActivity extends AppCompatActivity {
         menuDrawer.closeDrawer(GravityCompat.START);
     }
 
-    public class BluetoothHandler extends Thread {
+    public class BluetoothThread extends Thread {
 
         private BluetoothAdapter bluetoothAdapter;
         private BluetoothManager bluetoothManager;
@@ -99,7 +102,7 @@ public class MainActivity extends AppCompatActivity {
         // This boolean is used so that the thread isn't constantly showing the SnackBar.
         private boolean showSnackBar = true;
 
-        public BluetoothHandler(Context context) {
+        public BluetoothThread(Context context) {
             this.context = context;
             bluetoothManager = (BluetoothManager) context
                     .getSystemService(Context.BLUETOOTH_SERVICE);
@@ -151,54 +154,18 @@ public class MainActivity extends AppCompatActivity {
             showSnackBar = true;
 
             // Enable pair button if it is disabled.
-            if (!pairBtn.isEnabled()) {runOnUiThread(() -> pairBtn.setEnabled(true));}
-
-            connectedPCS = getConnectedPCS();
-            if (connectedPCS.size() > 0) {
-                runOnUiThread(() -> {
-                    // Boolean used to determine if RecView should be updated.
-                    boolean connectedPCListsDifferent = checkConnectedPCListsDifferent();
-
-                    // If currently connected PC list different from RecView, update RecView.
-                    if (connectedPCListsDifferent) {
-                        pcRecViewAdapter.connectedPCS = connectedPCS;
-                        pcRecViewAdapter.notifyDataSetChanged();
-                    }
-                });
-
-                // Toggle pair views so that the PC RecView is shown and the Pair layout is hidden.
-                togglePairViews(false);
-            } else {
-                // Toggle pair views so that the PC RecView is hidden and the Pair layout is shown.
-                togglePairViews(true);
+            if (!pairBtn.isEnabled()) {
+                runOnUiThread(() -> pairBtn.setEnabled(true));
             }
+
+            handleConnectedPCS();
+            // Toggle pair views based on whether there are connected PCs
+            togglePairViews(utils.getConnectedPCS().size() <= 0);
         }
 
-        private boolean checkConnectedPCListsDifferent() {
-            boolean connectedPCListsDifferent = false;
-            ArrayList<String> recViewPCAddresses = new ArrayList<>();
-            ArrayList<String> connectedPCAddresses = new ArrayList<>();
-
-            // Fill recViewPcAddresses with addresses in pcRecViewAdapter
-            for (ConnectedPC connectedPC : pcRecViewAdapter.connectedPCS) {
-                recViewPCAddresses.add(connectedPC.getAddress());
-            }
-
-            // Fill connectedPCAddresses with addresses in connectedPCS
-            for (ConnectedPC connectedPC : connectedPCS) {
-                connectedPCAddresses.add(connectedPC.getAddress());
-            }
-            // Check if the lists of connected devices are different.
-            if (!recViewPCAddresses.toString().equals(connectedPCAddresses.toString())) {
-                connectedPCListsDifferent = true;
-            }
-
-            return connectedPCListsDifferent;
-        }
-
-        public ArrayList<ConnectedPC> getConnectedPCS() {
+        public void handleConnectedPCS() {
             Set<BluetoothDevice> pairedDevices = bluetoothAdapter.getBondedDevices();
-            ArrayList<ConnectedPC> connectedPCS = new ArrayList<>();
+            ArrayList<ConnectedPC> currentlyConnectedPCS = new ArrayList<>();
 
             // Check for devices and see if they are connected. Then check if they are PCS.
             for (BluetoothDevice device : pairedDevices) {
@@ -219,16 +186,55 @@ public class MainActivity extends AppCompatActivity {
                 if (connected) {
                     int deviceClass = device.getBluetoothClass().getDeviceClass();
 
-                    // If it is a desktop or laptop PC, add to connectPCS list.
+                    // If it is a desktop or laptop PC, check if in ConnectedPCS list.
                     if (deviceClass == 268 || deviceClass == 260) {
-                        connectedPCS.add(new ConnectedPC(device.getName(), device.getAddress(),
-                                false));
-                        System.out.println(device.getAddress());
+                        currentlyConnectedPCS.add(new ConnectedPC(device.getName(),
+                                device.getAddress()));
+
+                        boolean deviceNotInConnectedPCS = true;
+                        for (ConnectedPC connectedPC : utils.getConnectedPCS()) {
+                            /*
+                            If the mac address matches a device in the ConnectPCS list,
+                            mark it as such
+                            */
+                            if (device.getAddress().equals(connectedPC.getAddress())) {
+                                deviceNotInConnectedPCS = false;
+                            }
+                        }
+                        // If the device isn't in ConnectedPCS, add it.
+                        if (deviceNotInConnectedPCS) {
+                            utils.addToConnectedPCS(new ConnectedPC(device.getName(),
+                                    device.getAddress()));
+                            runOnUiThread(() -> {
+                                pcRecViewAdapter.notifyDataSetChanged();
+                            });
+                        }
                     }
                 }
             }
 
-            return connectedPCS;
+            /*
+            If there are more previously connected PC's than connected,
+            check which one is missing.
+            */
+            if (currentlyConnectedPCS.size() < utils.getConnectedPCS().size()) {
+                for (ConnectedPC previouslyConnectedPC : utils.getConnectedPCS()) {
+                    boolean noLongerConnected = true;
+                    for (ConnectedPC currentlyConnectedPC : currentlyConnectedPCS) {
+                        if (previouslyConnectedPC.getAddress()
+                                .equals(currentlyConnectedPC.getAddress())) {
+                            noLongerConnected = false;
+                        }
+                    }
+
+                    // If PC is no longer connected, remove it from pcRecView.
+                    if (noLongerConnected) {
+                        utils.removeFromConnectedPCS(MainActivity.this,
+                                previouslyConnectedPC);
+                        runOnUiThread(() -> {pcRecViewAdapter.notifyDataSetChanged();});
+                    }
+                }
+            }
         }
 
         public void togglePairViews(boolean noPair) {

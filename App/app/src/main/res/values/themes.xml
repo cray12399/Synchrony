@@ -33,7 +33,7 @@
 
     <style name="SwitchOnPrimary" parent="Widget.AppCompat.CompoundButton.Switch">
         <item name="thumbTint">@color/design_default_color_on_primary</item>
-        <item name="trackTint">@color/design_default_color_primary_variant</item>
+        <item name="trackTint">@color/purple_700</item>
     </style>
 
 </resources>

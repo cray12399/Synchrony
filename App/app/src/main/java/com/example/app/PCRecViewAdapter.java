@@ -1,8 +1,6 @@
 package com.example.app;
 
-import android.app.AlertDialog;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -10,17 +8,21 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.widget.SwitchCompat;
+import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import java.util.ArrayList;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 public class PCRecViewAdapter extends RecyclerView.Adapter<PCRecViewAdapter.ViewHolder> {
 
     private final Context CONTEXT;
-    public ArrayList<ConnectedPC> connectedPCS;
+    public CopyOnWriteArrayList<ConnectedPC> connectedPCS;
+    private LinearLayoutManager layoutManager;
 
-    public PCRecViewAdapter(Context CONTEXT, ArrayList<ConnectedPC> connectedPCS) {
+    public PCRecViewAdapter(Context CONTEXT, LinearLayoutManager layoutManager,
+                            CopyOnWriteArrayList<ConnectedPC> connectedPCS) {
         this.CONTEXT = CONTEXT;
+        this.layoutManager = layoutManager;
         this.connectedPCS = connectedPCS;
     }
 
@@ -36,32 +38,16 @@ public class PCRecViewAdapter extends RecyclerView.Adapter<PCRecViewAdapter.View
     @Override
     public void onBindViewHolder(@NonNull PCRecViewAdapter.ViewHolder holder, int position) {
         holder.pcNameText.setText(connectedPCS.get(position).getName());
+        holder.pcActiveSwitch.setChecked(connectedPCS.get(position).isActivePC());
 
         holder.pcActiveSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            if (isChecked && !connectedPCS.get(position).isActivePC()) {
-                holder.pcActiveSwitch.setChecked(false);
+            connectedPCS.get(position).setActivePC(isChecked);
+            holder.pcActiveSwitch.setChecked(isChecked);
 
-                AlertDialog.Builder builder = new AlertDialog.Builder(CONTEXT);
-                builder.setTitle("Set Active PC?");
-                builder.setPositiveButton("Yes", (dialog, which) -> {
-                    connectedPCS.get(position).setActivePC(true);
-                    holder.pcActiveSwitch.setChecked(true);
-                });
-                builder.setNegativeButton("No", null);
-                AlertDialog dialog = builder.create();
-                dialog.show();
-            } else if (!isChecked && connectedPCS.get(position).isActivePC()) {
-                holder.pcActiveSwitch.setChecked(true);
-
-                AlertDialog.Builder builder = new AlertDialog.Builder(CONTEXT);
-                builder.setTitle("Disable Active PC?");
-                builder.setPositiveButton("Yes", (dialog, which) -> {
-                    connectedPCS.get(position).setActivePC(false);
-                    holder.pcActiveSwitch.setChecked(false);
-                });
-                builder.setNegativeButton("No", null);
-                AlertDialog dialog = builder.create();
-                dialog.show();
+            if (connectedPCS.get(position).isActivePC()) {
+                connectedPCS.get(position).initWork(CONTEXT);
+            } else {
+                connectedPCS.get(position).cancelWork(CONTEXT);
             }
         });
     }

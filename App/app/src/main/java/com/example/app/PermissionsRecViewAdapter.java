@@ -25,9 +25,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 
-/*
- * Class used to  display CardViews that allow user to grant permissions on the PermissionsActivity
- */
+// Class used to  display CardViews that allow user to grant permissions on the PermissionsActivity
 public class PermissionsRecViewAdapter extends RecyclerView.Adapter<PermissionsRecViewAdapter
         .ViewHolder> {
 
@@ -72,10 +70,7 @@ public class PermissionsRecViewAdapter extends RecyclerView.Adapter<PermissionsR
                             }
                         });
 
-                /*
-                 * Programmed a description button so users can understand
-                 * why they need to give permission
-                 */
+                // Description button so users can understand why they need to give permission
                 holder.permissionDescriptionButton.setOnClickListener(v -> {
                     AlertDialog.Builder builder = new AlertDialog.Builder(CONTEXT);
                     builder.setTitle("Why?");

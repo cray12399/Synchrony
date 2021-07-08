@@ -11,6 +11,7 @@
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.WRITE_CONTACTS" />
     <uses-permission android:name="android.permission.CALL_PHONE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:allowBackup="false"
@@ -18,8 +19,8 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.MaterialComponents.Light.NoActionBar">
-        <activity android:name=".PermissionsActivity"></activity>
+        android:theme="@style/Theme.App">
+        <activity android:name=".PermissionsActivity" />
         <activity android:name=".MainActivity" />
         <activity android:name=".StartupActivity">
             <intent-filter>

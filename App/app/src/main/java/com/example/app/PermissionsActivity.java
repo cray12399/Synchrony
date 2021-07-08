@@ -20,17 +20,15 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
-/*
- * Activity used to request permissions from user on startup.
- */
 
+// Activity used to request permissions from user on startup.
 public class PermissionsActivity extends AppCompatActivity {
 
     /*
-     * Constant used to determine needed permissions. The key-value pair is used within
-     * PermissionsActivity to obtain details of a permission. Permissions are defined this
-     * way so that they can be coded in dynamically as needed.
-     */
+    Constant used to determine needed permissions. The key-value pair is used within
+    PermissionsActivity to obtain details of a permission. Permissions are defined this
+    way so that they can be coded in dynamically as needed.
+    */
     private final HashMap<String, Permission> NEEDED_PERMISSIONS = new HashMap<String,
             Permission>() {{
         put("SMS", new Permission(
@@ -145,9 +143,9 @@ public class PermissionsActivity extends AppCompatActivity {
         super.onResume();
 
         /*
-         * Clone of permissionsNotGranted list to avoid exceptions when removing items
-         * from within foreach iterator.
-         */
+        Clone of permissionsNotGranted list to avoid exceptions when removing items
+        from within foreach iterator.
+        */
         HashMap<String, Permission> permissionsToCheck = new HashMap<>(
                 permissionsRecViewAdapter.permissionsNotGranted);
         // Iterate over permissions upon resuming of PermissionsActivity and update list accordingly
