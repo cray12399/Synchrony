@@ -2,50 +2,96 @@ package com.example.app;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.util.Pair;
 
-import androidx.work.WorkManager;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 
 import java.util.concurrent.CopyOnWriteArrayList;
 
 public class Utils {
-    private static final int MODE_PRIVATE = Context.MODE_PRIVATE;
+    private static final String PAIRED_PCS_KEY = "pairedPcs";
+    private static final String FIRST_RUN_KEY = "firstRun";
+
     private static SharedPreferences sharedPreferences;
 
     private static Utils utilsInstance = null;
 
-    private static CopyOnWriteArrayList<ConnectedPC> connectedPCS;
+    private static CopyOnWriteArrayList<PairedPC> pairedPCS;
 
     public static Utils getInstance(Context context) {
+        sharedPreferences = context.getSharedPreferences(context.getString(R.string.app_name),
+                Context.MODE_PRIVATE);
+
         if (utilsInstance == null) {
             utilsInstance = new Utils();
             initValues();
         }
-        sharedPreferences = context.getSharedPreferences("Droid-Communicator", MODE_PRIVATE);
         return utilsInstance;
     }
 
     private static void initValues() {
-        connectedPCS = new CopyOnWriteArrayList<>();
+        String pairedPCSValue = sharedPreferences.getString(PAIRED_PCS_KEY, null);
+        if (pairedPCSValue != null) {
+            Gson gson = new Gson();
+            pairedPCS = gson.fromJson(pairedPCSValue,
+                    new TypeToken<CopyOnWriteArrayList<PairedPC>>(){}.getType());
+        } else {
+            pairedPCS = new CopyOnWriteArrayList<>();
+        }
     }
 
     public boolean isFirstRun() {
-        if (sharedPreferences.getBoolean("firstRun", true)) {
-            sharedPreferences.edit().putBoolean("firstRun", false).apply();
+        if (sharedPreferences.getBoolean(FIRST_RUN_KEY, true)) {
+            sharedPreferences.edit().putBoolean(FIRST_RUN_KEY, false).apply();
             return true;
         } else {
             return false;
         }
     }
 
-    public CopyOnWriteArrayList<ConnectedPC> getConnectedPCS() {
-        return connectedPCS;
+    public CopyOnWriteArrayList<PairedPC> getPairedPCS() {
+        return pairedPCS;
     }
 
-    public void addToConnectedPCS(ConnectedPC connectedPC) {
-        connectedPCS.add(connectedPC);
+    public PairedPC getPairedPCByAddress(String address) {
+        for (PairedPC pairedPC : pairedPCS) {
+            if (pairedPC.getAddress().equals(address)) {
+                return pairedPC;
+            }
+        }
+        return null;
     }
 
-    public void removeFromConnectedPCS(Context context, ConnectedPC connectedPC) {
-        connectedPCS.remove(connectedPC);
+    public boolean inPairedPCS(String address) {
+        for (PairedPC pairedPC : pairedPCS) {
+            if (pairedPC.getAddress().equals(address)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public void addToPairedPCS(PairedPC pairedPC) {
+        pairedPCS.add(pairedPC);
+        savePairedPCSToDevice();
+    }
+
+    public void removeFromPairedPCS(String address) {
+        for (PairedPC pairedPC : pairedPCS) {
+            if (pairedPC.getAddress().equals(address)) {
+                pairedPCS.remove(pairedPC);
+                break;
+            }
+        }
+        savePairedPCSToDevice();
+    }
+
+    public void savePairedPCSToDevice() {
+        SharedPreferences.Editor prefsEditor = sharedPreferences.edit();
+        Gson gson = new Gson();
+        String json = gson.toJson(pairedPCS);
+        prefsEditor.putString(PAIRED_PCS_KEY, json);
+        prefsEditor.apply();
     }
 }

@@ -2,7 +2,6 @@ package com.example.app;
 
 import android.Manifest;
 import android.app.AlertDialog;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
@@ -55,7 +54,6 @@ public class PermissionsActivity extends AppCompatActivity {
     TextView skipBtn;
 
     @Override
-    @SuppressWarnings("unchecked")
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_permissions);
@@ -90,12 +88,7 @@ public class PermissionsActivity extends AppCompatActivity {
             builder.setMessage("Are you sure you wish to skip giving permissions? You will " +
                     "need to give permissions later!");
             builder.setNegativeButton("Cancel", null);
-            builder.setPositiveButton("Skip", new DialogInterface.OnClickListener() {
-                @Override
-                public void onClick(DialogInterface dialog, int which) {
-                    continueToMainActivity();
-                }
-            });
+            builder.setPositiveButton("Skip", (dialog, which) -> continueToMainActivity());
 
             AlertDialog dialog = builder.create();
             dialog.show();

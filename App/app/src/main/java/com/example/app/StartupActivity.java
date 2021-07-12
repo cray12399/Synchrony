@@ -6,6 +6,10 @@ import android.os.Handler;
 import android.util.Log;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.work.ExistingWorkPolicy;
+import androidx.work.OneTimeWorkRequest;
+import androidx.work.WorkManager;
+import androidx.work.WorkRequest;
 
 // This class is used to display the loading page and determine what the app should do on startup.
 public class StartupActivity extends AppCompatActivity {

@@ -8,22 +8,21 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.widget.SwitchCompat;
-import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import java.util.concurrent.CopyOnWriteArrayList;
 
 public class PCRecViewAdapter extends RecyclerView.Adapter<PCRecViewAdapter.ViewHolder> {
 
+    private final Utils utils;
     private final Context CONTEXT;
-    public CopyOnWriteArrayList<ConnectedPC> connectedPCS;
-    private LinearLayoutManager layoutManager;
+    public CopyOnWriteArrayList<PairedPC> connectedPCS;
 
-    public PCRecViewAdapter(Context CONTEXT, LinearLayoutManager layoutManager,
-                            CopyOnWriteArrayList<ConnectedPC> connectedPCS) {
+    public PCRecViewAdapter(Context CONTEXT, CopyOnWriteArrayList<PairedPC> connectedPCS) {
         this.CONTEXT = CONTEXT;
-        this.layoutManager = layoutManager;
         this.connectedPCS = connectedPCS;
+        this.utils = Utils.getInstance(CONTEXT);
+
     }
 
     @NonNull
@@ -38,17 +37,13 @@ public class PCRecViewAdapter extends RecyclerView.Adapter<PCRecViewAdapter.View
     @Override
     public void onBindViewHolder(@NonNull PCRecViewAdapter.ViewHolder holder, int position) {
         holder.pcNameText.setText(connectedPCS.get(position).getName());
-        holder.pcActiveSwitch.setChecked(connectedPCS.get(position).isActivePC());
+        holder.pcActiveSwitch.setChecked(connectedPCS.get(position).isActive());
+
+        holder.pcActiveSwitch.setChecked(connectedPCS.get(position).isActive());
 
         holder.pcActiveSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            connectedPCS.get(position).setActivePC(isChecked);
-            holder.pcActiveSwitch.setChecked(isChecked);
-
-            if (connectedPCS.get(position).isActivePC()) {
-                connectedPCS.get(position).initWork(CONTEXT);
-            } else {
-                connectedPCS.get(position).cancelWork(CONTEXT);
-            }
+            utils.getPairedPCS().get(position).setActive(isChecked);
+            utils.savePairedPCSToDevice();
         });
     }
 
