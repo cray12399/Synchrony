@@ -1,16 +1,15 @@
 package com.example.app;
 
+import android.app.Service;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothClass;
 import android.bluetooth.BluetoothDevice;
-import android.content.Context;
-import android.os.SystemClock;
+import android.content.Intent;
+import android.os.IBinder;
 
-import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
-import androidx.work.Worker;
-import androidx.work.WorkerParameters;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -19,42 +18,57 @@ import java.util.Set;
 
 import static com.example.app.App.CONNECTED_DEVICES_CHANNEL_ID;
 
-public class BluetoothSyncWorker extends Worker {
-    private final Utils utils;
+public class BluetoothSyncService extends Service {
+    private Utils utils;
+
     private final BluetoothAdapter BLUETOOTH_ADAPTER = BluetoothAdapter.getDefaultAdapter();
     private final String CONNECTED_PC_GROUP = "connectedPCS";
-    private ArrayList<String> notifiedPCAddresses = new ArrayList<>();
+    private final ArrayList<String> NOTIFIED_PC_ADDRESSES = new ArrayList<>();
 
-    public BluetoothSyncWorker(@NonNull Context context,
-                               @NonNull WorkerParameters workerParams) {
-        super(context, workerParams);
-        this.utils = Utils.getInstance(getApplicationContext());
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        utils = Utils.getInstance(this);
+
+        NotificationCompat.Builder summaryNotificationBuilder =
+                new NotificationCompat.Builder(this,
+                        CONNECTED_DEVICES_CHANNEL_ID)
+                        .setSmallIcon(R.drawable.ic_placeholder_logo)
+                        .setContentTitle("Sync Service Background")
+                        .setGroup(CONNECTED_PC_GROUP)
+                        .setGroupSummary(true)
+                        .setPriority(NotificationCompat.PRIORITY_HIGH)
+                        .setOngoing(true);
+
+        int SUMMARY_NOTIFICATION_ID = 69;
+        startForeground(SUMMARY_NOTIFICATION_ID, summaryNotificationBuilder.build());
+
+        Thread serviceThread = new Thread(() -> {
+            while (true) {
+                handleConnectedDevices();
+                handleNotifications();
+            }
+        });
+        serviceThread.start();
+
+        return START_STICKY_COMPATIBILITY;
     }
 
-    @NonNull
+    @Nullable
     @Override
-    public Result doWork() {
-        do {
-            handleConnectedDevices();
-            handleNotifications();
-            SystemClock.sleep(1000);
-        } while (!isStopped());
-
-        return Result.success();
+    public IBinder onBind(Intent intent) {
+        return null;
     }
 
     private void handleConnectedDevices() {
         Set<BluetoothDevice> pairedDevices = BLUETOOTH_ADAPTER.getBondedDevices();
-        ArrayList<PairedPC> currentlyConnectedPCS = new ArrayList<>();
 
         // Handle connected PCS
         for (BluetoothDevice device : pairedDevices) {
             if (isConnected(device.getAddress())) {
                 int deviceClass = device.getBluetoothClass().getDeviceClass();
 
-                // (deviceClass == BluetoothClass.Device.COMPUTER_LAPTOP |
-                //                deviceClass == BluetoothClass.Device.COMPUTER_DESKTOP)
-                if (deviceClass != 0) {
+                if (deviceClass == BluetoothClass.Device.COMPUTER_LAPTOP |
+                        deviceClass == BluetoothClass.Device.COMPUTER_DESKTOP) {
                     if (!utils.inPairedPCS(device.getAddress())) {
                         utils.addToPairedPCS(new PairedPC(device.getName(),
                                 device.getAddress(), true));
@@ -78,13 +92,14 @@ public class BluetoothSyncWorker extends Worker {
 
     private void handleNotifications() {
         NotificationManagerCompat notificationManager = NotificationManagerCompat
-                .from(getApplicationContext());
+                .from(this);
 
         for (PairedPC pairedPC : utils.getPairedPCS()) {
+            int CONNECTION_NOTIFICATION_ID = 420;
             if (pairedPC.isConnected()) {
-                if (pairedPC.isActive() && !notifiedPCAddresses.contains(pairedPC.getAddress())) {
+                if (pairedPC.isActive() && !NOTIFIED_PC_ADDRESSES.contains(pairedPC.getAddress())) {
                     NotificationCompat.Builder notificationBuilder = new NotificationCompat.Builder(
-                            getApplicationContext(), CONNECTED_DEVICES_CHANNEL_ID)
+                            this, CONNECTED_DEVICES_CHANNEL_ID)
                             .setSmallIcon(R.drawable.ic_pc)
                             .setContentTitle("Syncing PC")
                             .setContentText(pairedPC.getName())
@@ -93,39 +108,16 @@ public class BluetoothSyncWorker extends Worker {
                             .setOngoing(true);
 
                     notificationManager.notify(pairedPC.getAddress(),
-                            100, notificationBuilder.build());
-                    notifiedPCAddresses.add(pairedPC.getAddress());
-
-                    if (notifiedPCAddresses.size() == 1) {
-                        notificationManager = NotificationManagerCompat
-                                .from(getApplicationContext());
-                        NotificationCompat.Builder summaryNotificationBuilder =
-                                new NotificationCompat.Builder(getApplicationContext(),
-                                        CONNECTED_DEVICES_CHANNEL_ID)
-                                .setSmallIcon(R.drawable.ic_pc)
-                                .setContentTitle("Syncing PC's")
-                                .setGroup(CONNECTED_PC_GROUP)
-                                .setGroupSummary(true)
-                                .setPriority(NotificationCompat.PRIORITY_HIGH)
-                                .setOngoing(true);
-                        notificationManager.notify(101, summaryNotificationBuilder.build());
-                    }
+                            CONNECTION_NOTIFICATION_ID, notificationBuilder.build());
+                    NOTIFIED_PC_ADDRESSES.add(pairedPC.getAddress());
                 } else if (!pairedPC.isActive()) {
-                    notificationManager.cancel(pairedPC.getAddress(), 100);
-                    notifiedPCAddresses.remove(pairedPC.getAddress());
-
-                    if (notifiedPCAddresses.size() == 0) {
-                        notificationManager.cancel(101);
-                    }
+                    notificationManager.cancel(pairedPC.getAddress(), CONNECTION_NOTIFICATION_ID);
+                    NOTIFIED_PC_ADDRESSES.remove(pairedPC.getAddress());
                 }
             } else {
-                if (notifiedPCAddresses.contains(pairedPC.getAddress())) {
-                    notificationManager.cancel(pairedPC.getAddress(), 100);
-                    notifiedPCAddresses.remove(pairedPC.getAddress());
-
-                    if (notifiedPCAddresses.size() == 0) {
-                        notificationManager.cancel(101);
-                    }
+                if (NOTIFIED_PC_ADDRESSES.contains(pairedPC.getAddress())) {
+                    notificationManager.cancel(pairedPC.getAddress(), CONNECTION_NOTIFICATION_ID);
+                    NOTIFIED_PC_ADDRESSES.remove(pairedPC.getAddress());
                 }
             }
         }
@@ -159,10 +151,5 @@ public class BluetoothSyncWorker extends Worker {
             }
         }
         return false;
-    }
-
-    @Override
-    public void onStopped() {
-        super.onStopped();
     }
 }

@@ -35,11 +35,17 @@ public class MainActivity extends AppCompatActivity {
     private RelativeLayout pcListLayout;
     private RelativeLayout unpairedLayout;
     private PCRecViewAdapter pcRecViewAdapter;
-    private LinearLayoutManager pcRecViewLayoutManager;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        // If it is the first run, initialize BluetoothSyncService
+        if (getIntent().getBooleanExtra("firstRun", false)) {
+            Intent syncServiceIntent = new Intent(this, BluetoothSyncService.class);
+            startForegroundService(syncServiceIntent);
+        }
+
         setContentView(R.layout.activity_main);
 
         utils = Utils.getInstance(this);
@@ -71,7 +77,7 @@ public class MainActivity extends AppCompatActivity {
 
         // Initialize the pcRecView
         RecyclerView pcRecView = findViewById(R.id.pcRecView);
-        pcRecViewLayoutManager = new LinearLayoutManager(
+        LinearLayoutManager pcRecViewLayoutManager = new LinearLayoutManager(
                 MainActivity.this, LinearLayoutManager.VERTICAL,
                 false);
         pcRecViewAdapter = new PCRecViewAdapter(MainActivity.this,

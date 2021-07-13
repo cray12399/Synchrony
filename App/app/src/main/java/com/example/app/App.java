@@ -2,6 +2,7 @@ package com.example.app;
 
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.content.Intent;
 import android.os.Build;
 
 import androidx.work.ExistingWorkPolicy;
@@ -32,14 +33,7 @@ public class App extends android.app.Application {
     }
 
     private void startSyncWork() {
-        OneTimeWorkRequest bluetoothSyncWorkRequest =
-                new OneTimeWorkRequest.Builder(BluetoothSyncWorker.class)
-                        .addTag("bluetoothSyncWorker")
-                        .build();
-        WorkManager.getInstance(getApplicationContext()).enqueueUniqueWork(
-                "Bluetooth Sync",
-                ExistingWorkPolicy.REPLACE,
-                bluetoothSyncWorkRequest);
+        //TODO: Modify start sync work function
     }
 
     private boolean btWorkScheduled() {

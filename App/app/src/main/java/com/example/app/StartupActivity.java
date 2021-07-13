@@ -35,7 +35,6 @@ public class StartupActivity extends AppCompatActivity {
                 Intent permissionIntent = new Intent(StartupActivity.this,
                         PermissionsActivity.class);
                 startActivity(permissionIntent);
-
             } else {
                 // Else, go to MainActivity.
                 Log.d(TAG, "Subsequent startup, navigating to MainActivity");
