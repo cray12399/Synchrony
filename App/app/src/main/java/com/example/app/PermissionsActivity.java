@@ -172,7 +172,6 @@ public class PermissionsActivity extends AppCompatActivity {
         // Made a separate function so that I am not reusing a code block.
         Intent mainActivityIntent = new Intent(PermissionsActivity.this,
                 MainActivity.class);
-        mainActivityIntent.putExtra("firstRun", true);
         startActivity(mainActivityIntent);
         overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
 

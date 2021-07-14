@@ -1,11 +1,11 @@
 package com.example.app;
 
+import android.app.ActivityManager;
 import android.bluetooth.BluetoothAdapter;
+import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
-import android.os.SystemClock;
-import android.util.Pair;
 import android.view.View;
 import android.view.animation.Animation;
 import android.view.animation.AnimationUtils;
@@ -22,7 +22,6 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.snackbar.Snackbar;
 
-import java.util.ArrayList;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 public class MainActivity extends AppCompatActivity {
@@ -39,16 +38,20 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
-        // If it is the first run, initialize BluetoothSyncService
-        if (getIntent().getBooleanExtra("firstRun", false)) {
-            Intent syncServiceIntent = new Intent(this, BluetoothSyncService.class);
-            startForegroundService(syncServiceIntent);
-        }
-
         setContentView(R.layout.activity_main);
 
         utils = Utils.getInstance(this);
+
+        // If BluetoothSyncService not running, reset PC statuses and run it.
+        if (!isBTServiceRunning()) {
+            for (PairedPC pairedPC : utils.getPairedPCS()) {
+                pairedPC.setNotified(false);
+                pairedPC.setConnected(false);
+            }
+
+            Intent syncServiceIntent = new Intent(this, BluetoothSyncService.class);
+            startForegroundService(syncServiceIntent);
+        }
 
         menuDrawer = findViewById(R.id.drawerLayout);
         ImageButton menuOpenBtn = findViewById(R.id.menuOpenBtn);
@@ -81,12 +84,12 @@ public class MainActivity extends AppCompatActivity {
                 MainActivity.this, LinearLayoutManager.VERTICAL,
                 false);
         pcRecViewAdapter = new PCRecViewAdapter(MainActivity.this,
-                new CopyOnWriteArrayList<PairedPC>());
+                new CopyOnWriteArrayList<>());
         pcRecView.setLayoutManager(pcRecViewLayoutManager);
         pcRecView.setAdapter(pcRecViewAdapter);
 
         // Thread used to check for bluetooth capabilities and handle devices.
-        btUIUpdateThread bluetoothHandler = new btUIUpdateThread();
+        pcRecViewUpdateThread bluetoothHandler = new pcRecViewUpdateThread();
         bluetoothHandler.start();
     }
 
@@ -95,27 +98,46 @@ public class MainActivity extends AppCompatActivity {
         menuDrawer.closeDrawer(GravityCompat.START);
     }
 
-    public class btUIUpdateThread extends Thread {
+    private boolean isBTServiceRunning() {
+        ActivityManager manager = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
+        for (ActivityManager.RunningServiceInfo service : manager
+                .getRunningServices(Integer.MAX_VALUE)) {
+            if (BluetoothSyncService.class.getName().equals(service.service.getClassName())) {
+                return true;
+            }
+        }
+        return false;
+    }
 
-        private BluetoothAdapter bluetoothAdapter;
+    public class pcRecViewUpdateThread extends Thread {
+
+        private final BluetoothAdapter BLUETOOTH_ADAPTER;
+        private final Snackbar btDisabledSnackBar;
 
         // This boolean is used so that the thread isn't constantly showing the SnackBar.
-        private boolean showSnackBar = true;
+        private boolean shouldShowSnackBar = true;
+
+        public pcRecViewUpdateThread() {
+            this.BLUETOOTH_ADAPTER = BluetoothAdapter.getDefaultAdapter();
+            btDisabledSnackBar = Snackbar.make(menuDrawer,
+                    "Bluetooth is not enabled!",
+                    Snackbar.LENGTH_INDEFINITE)
+                    .setAction("Enable", v -> BLUETOOTH_ADAPTER.enable());
+        }
 
         @Override
         public void run() {
             // While loop used to cause thread to continuously update UI and look for connected PCS.
             while (true) {
-                bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
 
                 // If the device doesn't have a bluetooth adapter, it is not supported.
-                if (bluetoothAdapter == null) {
+                if (BLUETOOTH_ADAPTER == null) {
                     runOnUiThread(() -> pairBtn.setVisibility(View.GONE));
                     runOnUiThread(() -> noPairText.setText("Sorry, phone unsupported."));
                     break;
 
                     // If the adapter is enabled, show SnackBar if BT turned off and check for PCS.
-                } else if (bluetoothAdapter.isEnabled()) {
+                } else if (BLUETOOTH_ADAPTER.isEnabled()) {
                     handleBTEnabled();
 
                     //If the adapter is not enabled, prompt user to enable.
@@ -130,14 +152,12 @@ public class MainActivity extends AppCompatActivity {
             if (pairBtn.isEnabled()) {runOnUiThread(() -> pairBtn.setEnabled(false));}
 
             // If the app hasn't shown the SnackBar, show it.
-            if (showSnackBar) {
+            if (shouldShowSnackBar) {
                 runOnUiThread(() -> pairBtn.setEnabled(false));
-                Snackbar.make(menuDrawer, "Bluetooth is not enabled!",
-                        Snackbar.LENGTH_INDEFINITE).setAction("Enable",
-                        v -> bluetoothAdapter.enable()).show();
+                btDisabledSnackBar.show();
 
                 // Stop showing the SnackBar since it has already been shown.
-                showSnackBar = false;
+                shouldShowSnackBar = false;
             }
 
             // Toggle pair views so that the PC RecView is hidden and the Pair layout is shown.
@@ -145,7 +165,8 @@ public class MainActivity extends AppCompatActivity {
         }
 
         private void handleBTEnabled() {
-            showSnackBar = true;
+            shouldShowSnackBar = true;
+            btDisabledSnackBar.dismiss();
 
             CopyOnWriteArrayList<PairedPC> connectedPCS = new CopyOnWriteArrayList<>();
             for (PairedPC pairedPC : utils.getPairedPCS()) {

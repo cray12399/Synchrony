@@ -2,18 +2,7 @@ package com.example.app;
 
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
-import android.content.Intent;
 import android.os.Build;
-
-import androidx.work.ExistingWorkPolicy;
-import androidx.work.OneTimeWorkRequest;
-import androidx.work.WorkInfo;
-import androidx.work.WorkManager;
-
-import com.google.common.util.concurrent.ListenableFuture;
-
-import java.util.List;
-import java.util.concurrent.ExecutionException;
 
 public class App extends android.app.Application {
 
@@ -24,37 +13,15 @@ public class App extends android.app.Application {
     public void onCreate() {
         super.onCreate();
 
+        // Create notification channels
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            createConnectedDevicesNotificationChannel();
-            createDisconnectedDevicesNotificationChannel();
-        }
-
-        startSyncWork();
-    }
-
-    private void startSyncWork() {
-        //TODO: Modify start sync work function
-    }
-
-    private boolean btWorkScheduled() {
-        WorkManager instance = WorkManager.getInstance(getApplicationContext());
-        ListenableFuture<List<WorkInfo>> statuses = instance
-                .getWorkInfosByTag("bluetoothSyncWorker");
-        try {
-            boolean running = false;
-            List<WorkInfo> workInfoList = statuses.get();
-            for (WorkInfo workInfo : workInfoList) {
-                WorkInfo.State state = workInfo.getState();
-                running = state == WorkInfo.State.RUNNING | state == WorkInfo.State.ENQUEUED;
-            }
-            return running;
-        } catch (ExecutionException | InterruptedException e) {
-            e.printStackTrace();
-            return false;
+            createConnectedPCNotificationChannel();
+            createDisconnectedPCNotificationChannel();
         }
     }
 
-    private void createConnectedDevicesNotificationChannel() {
+    // Creates the channel that contains the ongoing notifications for connected PC's.
+    private void createConnectedPCNotificationChannel() {
         NotificationChannel connectedDevicesChannel = new NotificationChannel(
                 CONNECTED_DEVICES_CHANNEL_ID,
                 "Connected Devices",
@@ -66,7 +33,8 @@ public class App extends android.app.Application {
         notificationManager.createNotificationChannel(connectedDevicesChannel);
     }
 
-    private void createDisconnectedDevicesNotificationChannel() {
+    // Creates the channel that contains the disconnected PC notifications.
+    private void createDisconnectedPCNotificationChannel() {
         NotificationChannel disconnectedDevicesChannel = new NotificationChannel(
                 DISCONNECTED_DEVICES_CHANNEL_ID,
                 "Disconnected Devices",
