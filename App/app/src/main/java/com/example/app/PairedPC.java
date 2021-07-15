@@ -13,6 +13,7 @@ import java.util.UUID;
 public class PairedPC {
     private final String PC_NAME;
     private final String PC_ADDRESS;
+    private BluetoothDevice associateDevice;
     private boolean isActive;
     private boolean isConnected;
     private boolean isNotified;
@@ -20,9 +21,10 @@ public class PairedPC {
     private UUID uuid;
     private Thread bluetoothCommThread;
 
-    public PairedPC(String pcName, String pcAddress, boolean isConnected) {
+    public PairedPC(String pcName, String pcAddress, BluetoothDevice associateDevice, boolean isConnected) {
         this.PC_NAME = pcName;
         this.PC_ADDRESS = pcAddress;
+        this.associateDevice = associateDevice;
         this.isConnected = isConnected;
     }
 
@@ -131,5 +133,13 @@ public class PairedPC {
                 e.printStackTrace();
             }
         }
+    }
+
+    public BluetoothDevice getAssociateDevice() {
+        return associateDevice;
+    }
+
+    public void setAssociateDevice(BluetoothDevice associateDevice) {
+        this.associateDevice = associateDevice;
     }
 }

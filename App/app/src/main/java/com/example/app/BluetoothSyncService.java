@@ -103,12 +103,14 @@ public class BluetoothSyncService extends Service {
                             if (!utils.inPairedPCS(device.getAddress())) {
                                 // Add to PairedPCS list
                                 utils.addToPairedPCS(new PairedPC(device.getName(),
-                                        device.getAddress(), true));
+                                        device.getAddress(), device, true));
                                 utils.savePairedPCSToDevice();
 
                                 // If the PC has been paired before:
                             } else if (utils.getPairedPCByAddress(device.getAddress()) != null) {
                                 // Set the PC status to connected.
+                                utils.getPairedPCByAddress(device.getAddress())
+                                        .setAssociateDevice(device);
                                 utils.getPairedPCByAddress(device.getAddress()).setConnected(true);
                             }
 
@@ -220,19 +222,15 @@ public class BluetoothSyncService extends Service {
     }
 
     private static class BluetoothAcceptThread extends Thread {
-        private final Context CONTEXT;
-        private final BluetoothAdapter BLUETOOTH_ADAPTER = BluetoothAdapter.getDefaultAdapter();
         private final BluetoothServerSocket BLUETOOTH_SERVER_SOCKET;
-        private final java.util.UUID UUID;
 
         public BluetoothAcceptThread(Context context, java.util.UUID uuid) {
-            this.CONTEXT = context;
-            this.UUID = uuid;
 
             BluetoothServerSocket tmp = null;
             try {
+                BluetoothAdapter BLUETOOTH_ADAPTER = BluetoothAdapter.getDefaultAdapter();
                 tmp = BLUETOOTH_ADAPTER.listenUsingRfcommWithServiceRecord(
-                        CONTEXT.getString(R.string.app_name), UUID);
+                        context.getString(R.string.app_name), uuid);
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -302,22 +300,22 @@ public class BluetoothSyncService extends Service {
     private static class BluetoothCommThread extends Thread {
         private final BluetoothAdapter BLUETOOTH_ADAPTER = BluetoothAdapter.getDefaultAdapter();
         private final Context CONTEXT;
-        private final PairedPC PAIRED_PC;
+        private final BluetoothDevice DEVICE;
         private final BluetoothSocket BLUETOOTH_SOCKET;
         private java.util.UUID UUID;
 
 
-        public BluetoothCommThread(Context context, PairedPC pairedPC) {
+        public BluetoothCommThread(Context context, BluetoothDevice device) {
             this.CONTEXT = context;
-            this.PAIRED_PC = pairedPC;
-            this.UUID = pairedPC.getUuid();
+            this.DEVICE = device;
+            this.UUID = java.util.UUID.fromString(device.getUuids()[0].toString());
 
             BluetoothSocket tmp = null;
 
             try {
                 // Get a BluetoothSocket to connect with the given BluetoothDevice.
                 // MY_UUID is the app's UUID string, also used in the server code.
-                tmp = PAIRED_PC.createRfcommSocketToServiceRecord(UUID);
+                tmp = DEVICE.createRfcommSocketToServiceRecord(UUID);
             } catch (IOException e) {
                 e.printStackTrace();
             }
