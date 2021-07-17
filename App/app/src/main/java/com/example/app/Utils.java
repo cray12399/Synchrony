@@ -1,5 +1,7 @@
 package com.example.app;
 
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothDevice;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.util.Pair;
@@ -7,6 +9,9 @@ import android.util.Pair;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 public class Utils {
@@ -54,7 +59,7 @@ public class Utils {
         return pairedPCS;
     }
 
-    public PairedPC getPairedPCByAddress(String address) {
+    public PairedPC getPairedPC(String address) {
         for (PairedPC pairedPC : pairedPCS) {
             if (pairedPC.getAddress().equals(address)) {
                 return pairedPC;
@@ -93,5 +98,37 @@ public class Utils {
         String json = gson.toJson(pairedPCS);
         prefsEditor.putString(PAIRED_PCS_KEY, json);
         prefsEditor.apply();
+    }
+
+    public boolean isConnected(String address) {
+        Set<BluetoothDevice> pairedDevices = BluetoothAdapter.getDefaultAdapter()
+                .getBondedDevices();
+
+        for (BluetoothDevice device : pairedDevices) {
+            if (device.getAddress().equals(address)) {
+                Method method = null;
+                try {
+                    method = device.getClass().getMethod("isConnected", (Class[]) null);
+                } catch (NoSuchMethodException e) {
+                    e.printStackTrace();
+                }
+
+                boolean connected = false;
+                try {
+                    assert method != null;
+                    Object methodInvocation = method.invoke(device, (Object[]) null);
+                    if (methodInvocation != null) {
+                        connected = (boolean) methodInvocation;
+                    } else {
+                        connected = false;
+                    }
+                } catch (IllegalAccessException | InvocationTargetException e) {
+                    e.printStackTrace();
+                }
+
+                return connected;
+            }
+        }
+        return false;
     }
 }

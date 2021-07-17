@@ -2,6 +2,7 @@ package com.example.app;
 
 import android.app.ActivityManager;
 import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothDevice;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
@@ -22,6 +23,9 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.snackbar.Snackbar;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 public class MainActivity extends AppCompatActivity {
@@ -46,7 +50,6 @@ public class MainActivity extends AppCompatActivity {
         if (!isBTServiceRunning()) {
             for (PairedPC pairedPC : utils.getPairedPCS()) {
                 pairedPC.setNotified(false);
-                pairedPC.setConnected(false);
             }
 
             Intent syncServiceIntent = new Intent(this, BluetoothSyncService.class);
@@ -129,7 +132,6 @@ public class MainActivity extends AppCompatActivity {
         public void run() {
             // While loop used to cause thread to continuously update UI and look for connected PCS.
             while (true) {
-
                 // If the device doesn't have a bluetooth adapter, it is not supported.
                 if (BLUETOOTH_ADAPTER == null) {
                     runOnUiThread(() -> pairBtn.setVisibility(View.GONE));
@@ -170,7 +172,7 @@ public class MainActivity extends AppCompatActivity {
 
             CopyOnWriteArrayList<PairedPC> connectedPCS = new CopyOnWriteArrayList<>();
             for (PairedPC pairedPC : utils.getPairedPCS()) {
-                if (pairedPC.isConnected()) {
+                if (utils.isConnected(pairedPC.getAddress())) {
                     connectedPCS.add(pairedPC);
                 }
             }
@@ -209,6 +211,37 @@ public class MainActivity extends AppCompatActivity {
                     runOnUiThread(() -> pcListLayout.setVisibility(View.VISIBLE));
                 }
             }
+        }
+
+        private boolean isConnected(String address) {
+            Set<BluetoothDevice> pairedDevices = BLUETOOTH_ADAPTER.getBondedDevices();
+
+            for (BluetoothDevice device : pairedDevices) {
+                if (device.getAddress().equals(address)) {
+                    Method method = null;
+                    try {
+                        method = device.getClass().getMethod("isConnected", (Class[]) null);
+                    } catch (NoSuchMethodException e) {
+                        e.printStackTrace();
+                    }
+
+                    boolean connected = false;
+                    try {
+                        assert method != null;
+                        Object methodInvocation = method.invoke(device, (Object[]) null);
+                        if (methodInvocation != null) {
+                            connected = (boolean) methodInvocation;
+                        } else {
+                            connected = false;
+                        }
+                    } catch (IllegalAccessException | InvocationTargetException e) {
+                        e.printStackTrace();
+                    }
+
+                    return connected;
+                }
+            }
+            return false;
         }
     }
 }

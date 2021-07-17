@@ -11,7 +11,6 @@ public class BootReceiver extends BroadcastReceiver {
 
         for (PairedPC pairedPC : utils.getPairedPCS()) {
             pairedPC.setNotified(false);
-            pairedPC.setConnected(false);
         }
 
         if (Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction())) {
