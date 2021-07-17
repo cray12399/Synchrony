@@ -54,13 +54,17 @@ public class BluetoothSyncService extends Service {
 
     // This thread manages the connected PC's
     private static class PCHandlerThread extends Thread {
-        private final BluetoothAdapter BLUETOOTH_ADAPTER = BluetoothAdapter.getDefaultAdapter();
         private final Utils utils;
         private final Context CONTEXT;
+        private final BluetoothAdapter BLUETOOTH_ADAPTER = BluetoothAdapter.getDefaultAdapter();
+        private final NotificationManagerCompat NOTIFICATION_MANAGER;
+        final int CONNECTION_NOTIFICATION_ID = 420;
 
         public PCHandlerThread(Context context) {
             this.utils = Utils.getInstance(context);
             this.CONTEXT = context;
+
+            NOTIFICATION_MANAGER = NotificationManagerCompat.from(context);
         }
 
         @Override
@@ -97,7 +101,7 @@ public class BluetoothSyncService extends Service {
                     }
 
                     if (pairedPC.getBluetoothCommThread() != null) {
-                        pairedPC.getBluetoothCommThread().interrupt();
+                        pairedPC.stopBluetoothCommThread();
                     }
                 }
             }
@@ -107,19 +111,25 @@ public class BluetoothSyncService extends Service {
             PairedPC pairedPC = utils.getPairedPC(device.getAddress());
 
             if (deviceConnected) {
+                // If it is marked as active by the user, make the notification and start
+                // its background thread.
                 if (pairedPC.isActive()) {
                     if (!pairedPC.isNotified()){handleNotification(pairedPC, false);}
                     if (pairedPC.getBluetoothCommThread() == null) {
                         utils.getPairedPC(device.getAddress()).setBluetoothCommThread(
                                 new BluetoothCommThread(CONTEXT, device));
                     }
+                // If it is marked as inactive by the user, cancel the notification and interrupt
+                // its background thread.
                 } else {
                     if (pairedPC.isNotified()) {handleNotification(pairedPC, true);}
                     if (pairedPC.getBluetoothCommThread() != null) {
-                        utils.getPairedPC(device.getAddress()).getBluetoothCommThread().interrupt();
+                        utils.getPairedPC(device.getAddress()).stopBluetoothCommThread();
                     }
                 }
             } else {
+                // If the PC is notified, but not connected, cancel its notification and notify
+                // the user that it was disconnected.
                 if (pairedPC.isNotified()) {
                     handleNotification(pairedPC, true);
                     sendDisconnectNotification(pairedPC);
@@ -128,9 +138,6 @@ public class BluetoothSyncService extends Service {
         }
 
         private void sendDisconnectNotification(PairedPC pairedPC) {
-            NotificationManagerCompat notificationManager = NotificationManagerCompat
-                    .from(CONTEXT);
-            final int CONNECTION_NOTIFICATION_ID = 420;
             NotificationCompat.Builder disconnectedNotification =
                     new NotificationCompat.Builder(CONTEXT,
                             DISCONNECTED_DEVICES_CHANNEL_ID)
@@ -139,16 +146,13 @@ public class BluetoothSyncService extends Service {
                             .setContentText(String.format("%s disconnected!",
                                     pairedPC.getName()))
                             .setPriority(NotificationCompat.PRIORITY_HIGH);
-            notificationManager.notify(pairedPC.getAddress(),
+            NOTIFICATION_MANAGER.notify(pairedPC.getAddress(),
                     CONNECTION_NOTIFICATION_ID, disconnectedNotification.build());
         }
 
-        private void handleNotification(PairedPC pairedPC, boolean removeNotification) {
-            NotificationManagerCompat notificationManager = NotificationManagerCompat
-                    .from(CONTEXT);
-            final int CONNECTION_NOTIFICATION_ID = 420;
-
-            if (!removeNotification) {
+        private void handleNotification(PairedPC pairedPC, boolean cancelNotification) {
+            // If the app shouldn't cancel the notification, make one, and mark the PC as notified.
+            if (!cancelNotification) {
                 final String CONNECTED_PC_GROUP = "connectedPCS";
                 NotificationCompat.Builder connectedNotification =
                         new NotificationCompat.Builder(
@@ -159,12 +163,13 @@ public class BluetoothSyncService extends Service {
                                 .setGroup(CONNECTED_PC_GROUP)
                                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                                 .setOngoing(true);
-                notificationManager.notify(pairedPC.getAddress(),
+                NOTIFICATION_MANAGER.notify(pairedPC.getAddress(),
                         CONNECTION_NOTIFICATION_ID, connectedNotification.build());
                 utils.getPairedPC(pairedPC.getAddress()).setNotified(true);
+            // If it should cancel the notification, cancel it, and mark it as un-notified.
             } else {
                 if (pairedPC.isNotified()) {
-                    notificationManager.cancel(pairedPC.getAddress(),
+                    NOTIFICATION_MANAGER.cancel(pairedPC.getAddress(),
                             CONNECTION_NOTIFICATION_ID);
                     pairedPC.setNotified(false);
                 }

@@ -74,6 +74,12 @@ public class PairedPC {
         bluetoothCommThread.start();
     }
 
+    public void startBluetoothCommThread() {
+        if (bluetoothCommThread != null) {
+            bluetoothCommThread.start();
+        }
+    }
+
     public void stopBluetoothCommThread() {
         if (bluetoothCommThread != null) {
             bluetoothCommThread.interrupt();
