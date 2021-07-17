@@ -70,39 +70,40 @@ public class BluetoothSyncService extends Service {
         @Override
         public void run() {
             while (!isInterrupted()) {
-                handleConnectedDevices();
+                // If the bluetooth adapter is enabled, handle connected devices.
+                if (BLUETOOTH_ADAPTER.isEnabled()) {
+                    handleConnectedDevices();
+                // If the bluetooth adapter is disabled, cancel their notifications
+                // and stop their background threads.
+                } else {
+                    for (PairedPC pairedPC : utils.getPairedPCS()) {
+                        if (pairedPC.isNotified()) {
+                            handleNotification(pairedPC, true);
+                            sendDisconnectNotification(pairedPC);
+                        }
+
+                        if (pairedPC.getBluetoothCommThread() != null) {
+                            pairedPC.stopBluetoothCommThread();
+                        }
+                    }
+                }
+
             }
         }
 
         private void handleConnectedDevices() {
-            // If the bluetooth adapter is enabled, look for PC's
-            if (BLUETOOTH_ADAPTER.isEnabled()) {
-                for (BluetoothDevice device : BLUETOOTH_ADAPTER.getBondedDevices()) {
-                    // If the device is a computer, then see if they have been paired before.
-                    int deviceClass = device.getBluetoothClass().getDeviceClass();
-                    if (deviceClass == BluetoothClass.Device.COMPUTER_LAPTOP ||
-                            deviceClass == BluetoothClass.Device.COMPUTER_DESKTOP) {
-                        if (!utils.inPairedPCS(device.getAddress())) {
-                            // If the device hasn't been paired before, add it to pairedPCS.
-                            utils.addToPairedPCS(new PairedPC(device.getName(),
-                                    device.getAddress(), device));
-                        }
-                        // Handle the PC
-                        handlePC(device, utils.isConnected(device.getAddress()));
+            for (BluetoothDevice device : BLUETOOTH_ADAPTER.getBondedDevices()) {
+                // If the device is a computer, then see if they have been paired before.
+                int deviceClass = device.getBluetoothClass().getDeviceClass();
+                if (deviceClass == BluetoothClass.Device.COMPUTER_LAPTOP ||
+                        deviceClass == BluetoothClass.Device.COMPUTER_DESKTOP) {
+                    if (!utils.inPairedPCS(device.getAddress())) {
+                        // If the device hasn't been paired before, add it to pairedPCS.
+                        utils.addToPairedPCS(new PairedPC(device.getName(),
+                                device.getAddress(), device));
                     }
-                }
-                // If the bluetooth adapter is disabled, cancel their notifications
-                // and stop their background threads.
-            } else {
-                for (PairedPC pairedPC : utils.getPairedPCS()) {
-                    if (pairedPC.isNotified()) {
-                        handleNotification(pairedPC, true);
-                        sendDisconnectNotification(pairedPC);
-                    }
-
-                    if (pairedPC.getBluetoothCommThread() != null) {
-                        pairedPC.stopBluetoothCommThread();
-                    }
+                    // Handle the PC
+                    handlePC(device, utils.isConnected(device.getAddress()));
                 }
             }
         }
@@ -118,6 +119,11 @@ public class BluetoothSyncService extends Service {
                     if (pairedPC.getBluetoothCommThread() == null) {
                         utils.getPairedPC(device.getAddress()).setBluetoothCommThread(
                                 new BluetoothCommThread(CONTEXT, device));
+                    } else {
+                        if (!pairedPC.getBluetoothCommThread().isAlive()) {
+                            utils.getPairedPC(device.getAddress()).setBluetoothCommThread(
+                                    new BluetoothCommThread(CONTEXT, device));
+                        }
                     }
                 // If it is marked as inactive by the user, cancel the notification and interrupt
                 // its background thread.
