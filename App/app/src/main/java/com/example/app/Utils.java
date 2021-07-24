@@ -4,7 +4,6 @@ import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.util.Pair;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
@@ -12,17 +11,20 @@ import com.google.gson.reflect.TypeToken;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 public class Utils {
     private static final String PAIRED_PCS_KEY = "pairedPcs";
+    private static final String PC_UUIDS_KEY = "pcUuids";
     private static final String FIRST_RUN_KEY = "firstRun";
+    private static final String UUID_KEY = "uuid";
 
     private static SharedPreferences sharedPreferences;
-
     private static Utils utilsInstance = null;
-
     private static CopyOnWriteArrayList<PairedPC> pairedPCS;
+    private static String uuid;
+
 
     public static Utils getInstance(Context context) {
         sharedPreferences = context.getSharedPreferences(context.getString(R.string.app_name),
@@ -32,6 +34,7 @@ public class Utils {
             utilsInstance = new Utils();
             initValues();
         }
+
         return utilsInstance;
     }
 
@@ -40,10 +43,18 @@ public class Utils {
         if (pairedPCSValue != null) {
             Gson gson = new Gson();
             pairedPCS = gson.fromJson(pairedPCSValue,
-                    new TypeToken<CopyOnWriteArrayList<PairedPC>>(){}.getType());
+                    new TypeToken<CopyOnWriteArrayList<PairedPC>>() {
+                    }.getType());
         } else {
             pairedPCS = new CopyOnWriteArrayList<>();
         }
+
+        uuid = sharedPreferences.getString(UUID_KEY, null);
+        if (uuid == null) {
+            uuid = java.util.UUID.randomUUID().toString();
+            sharedPreferences.edit().putString(UUID_KEY, uuid).apply();
+        }
+
     }
 
     public boolean isFirstRun() {
@@ -98,6 +109,10 @@ public class Utils {
         String json = gson.toJson(pairedPCS);
         prefsEditor.putString(PAIRED_PCS_KEY, json);
         prefsEditor.apply();
+    }
+
+    public UUID getUuid() {
+        return java.util.UUID.fromString(uuid);
     }
 
     public boolean isConnected(String address) {

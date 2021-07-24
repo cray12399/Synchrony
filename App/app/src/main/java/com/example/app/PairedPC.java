@@ -1,20 +1,21 @@
 package com.example.app;
 
 import android.bluetooth.BluetoothDevice;
+import android.content.Context;
 
-import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class PairedPC {
+    private transient final Context CONTEXT;
     private final String PC_NAME;
     private final String PC_ADDRESS;
     private BluetoothDevice associateDevice;
     private boolean isActive;
-    private boolean isNotified;
-    private boolean initialSyncDone;
-    private UUID uuid;
-    private transient Thread bluetoothCommThread;
+    private transient Thread bluetoothConnectionThread;
 
-    public PairedPC(String pcName, String pcAddress, BluetoothDevice associateDevice) {
+    public PairedPC(Context context, String pcName, String pcAddress,
+                    BluetoothDevice associateDevice) {
+        this.CONTEXT = context;
         this.PC_NAME = pcName;
         this.PC_ADDRESS = pcAddress;
         this.associateDevice = associateDevice;
@@ -34,55 +35,20 @@ public class PairedPC {
 
     public void setActive(boolean activeDevice) {
         isActive = activeDevice;
-
-        if (!isActive && bluetoothCommThread != null) {
-            bluetoothCommThread.interrupt();
-            bluetoothCommThread = null;
-        }
     }
 
-    public boolean isNotified() {
-        return isNotified;
+    public Thread getBluetoothConnectionThread() {
+        return bluetoothConnectionThread;
     }
 
-    public void setNotified(boolean notified) {
-        isNotified = notified;
-    }
-
-    public boolean isInitialSyncDone() {
-        return initialSyncDone;
-    }
-
-    public void setInitialSyncDone(boolean initialSyncDone) {
-        this.initialSyncDone = initialSyncDone;
-    }
-
-    public UUID getUuid() {
-        return uuid;
-    }
-
-    public void setUuid(String uuid) {
-        this.uuid = UUID.fromString(uuid);
-    }
-
-    public Thread getBluetoothCommThread() {
-        return bluetoothCommThread;
-    }
-
-    public void setBluetoothCommThread(Thread bluetoothCommThread) {
-        this.bluetoothCommThread = bluetoothCommThread;
+    public void setBluetoothConnectionThread(Thread bluetoothCommThread) {
+        this.bluetoothConnectionThread = bluetoothCommThread;
         bluetoothCommThread.start();
     }
 
-    public void startBluetoothCommThread() {
-        if (bluetoothCommThread != null) {
-            bluetoothCommThread.start();
-        }
-    }
-
-    public void stopBluetoothCommThread() {
-        if (bluetoothCommThread != null) {
-            bluetoothCommThread.interrupt();
+    public void interruptBluetoothConnectionThread() {
+        if (bluetoothConnectionThread != null) {
+            bluetoothConnectionThread.interrupt();
         }
     }
 
@@ -92,5 +58,12 @@ public class PairedPC {
 
     public void setAssociateDevice(BluetoothDevice associateDevice) {
         this.associateDevice = associateDevice;
+    }
+
+    public static class NotificationID {
+        private final static AtomicInteger notificationID = new AtomicInteger(0);
+        public static int getID() {
+            return notificationID.incrementAndGet();
+        }
     }
 }

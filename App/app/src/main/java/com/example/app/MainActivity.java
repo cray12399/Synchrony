@@ -48,10 +48,6 @@ public class MainActivity extends AppCompatActivity {
 
         // If BluetoothSyncService not running, reset PC statuses and run it.
         if (!isBTServiceRunning()) {
-            for (PairedPC pairedPC : utils.getPairedPCS()) {
-                pairedPC.setNotified(false);
-            }
-
             Intent syncServiceIntent = new Intent(this, BluetoothSyncService.class);
             startForegroundService(syncServiceIntent);
         }

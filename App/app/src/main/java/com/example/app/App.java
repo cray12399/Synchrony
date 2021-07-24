@@ -3,11 +3,13 @@ package com.example.app;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.os.Build;
+import android.util.Log;
 
 public class App extends android.app.Application {
 
     public static final String CONNECTED_DEVICES_CHANNEL_ID = "connected_devices";
     public static final String DISCONNECTED_DEVICES_CHANNEL_ID = "disconnected_devices";
+    private static final String TAG = "App";
 
     @Override
     public void onCreate() {
@@ -31,6 +33,8 @@ public class App extends android.app.Application {
 
         NotificationManager notificationManager = getSystemService(NotificationManager.class);
         notificationManager.createNotificationChannel(connectedDevicesChannel);
+
+        Log.d(TAG, "createConnectedPCNotificationChannel: Channel Created!");
     }
 
     // Creates the channel that contains the disconnected PC notifications.
@@ -44,5 +48,7 @@ public class App extends android.app.Application {
 
         NotificationManager notificationManager = getSystemService(NotificationManager.class);
         notificationManager.createNotificationChannel(disconnectedDevicesChannel);
+
+        Log.d(TAG, "createDisconnectedPCNotificationChannel: Channel Created!");
     }
 }
