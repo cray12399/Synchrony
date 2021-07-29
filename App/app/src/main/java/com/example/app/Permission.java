@@ -2,7 +2,7 @@ package com.example.app;
 
 import java.io.Serializable;
 
-// Class used to contain permission details within PermissionsActivity
+// Class used to contain permission details within PermissionsActivity.
 public class Permission implements Serializable {
     private final String manifestPermission;
     private final String description;

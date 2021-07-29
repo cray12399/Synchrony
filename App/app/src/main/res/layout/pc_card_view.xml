@@ -1,36 +1,108 @@
 <?xml version="1.0" encoding="utf-8"?>
 <com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:layout_width="300dp"
-    android:layout_height="50dp"
+    android:layout_width="350dp"
+    android:layout_height="wrap_content"
     android:layout_marginTop="20dp"
     android:backgroundTint="@color/design_default_color_primary"
     android:elevation="30dp"
-    app:cardCornerRadius="15dp">
+    app:cardCornerRadius="15dp"
+    android:orientation="horizontal"
+    android:id="@+id/parent">
 
     <RelativeLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="wrap_content"
         android:padding="15dp">
 
-        <TextView
-            android:id="@+id/pcNameText"
+        <ImageButton
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_centerVertical="true"
-            android:text="PC Name"
-            android:textColor="@color/design_default_color_on_primary"
-            android:textSize="15sp"
-            android:textStyle="bold" />
+            android:layout_height="27dp"
+            android:id="@+id/expandPCBtn"
+            android:background="@drawable/ic_expand"/>
 
-        <androidx.appcompat.widget.SwitchCompat
-            android:id="@+id/pcActiveSwitch"
-            style="@style/SwitchOnPrimary"
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_alignParentEnd="true"
-            android:layout_centerVertical="true"
-            android:clickable="true" />
+            android:orientation="vertical"
+            android:layout_toEndOf="@+id/expandPCBtn">
+
+            <RelativeLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <TextView
+                    android:id="@+id/pcNameText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="PC Name"
+                    android:textColor="@color/design_default_color_on_primary"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:layout_centerVertical="true"
+                    android:layout_marginStart="5dp"/>
+
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/pcActiveSwitch"
+                    style="@style/SwitchOnPrimary"
+                    android:layout_width="wrap_content"
+                    android:layout_height="10dp"
+                    android:layout_alignParentEnd="true"
+                    android:clickable="true" />
+            </RelativeLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:layout_marginStart="5dp"
+                android:id="@+id/expandedLayout"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="MAC:"
+                        android:textStyle="bold"
+                        android:textColor="@color/design_default_color_on_primary"/>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Address"
+                        android:textColor="@color/design_default_color_on_primary"
+                        android:id="@+id/pcAddressText"
+                        android:layout_marginStart="5dp"/>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Type:"
+                        android:textStyle="bold"
+                        android:textColor="@color/design_default_color_on_primary"/>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Computer"
+                        android:textColor="@color/design_default_color_on_primary"
+                        android:id="@+id/pcTypeText"
+                        android:layout_marginStart="5dp"/>
+                </LinearLayout>
+
+            </LinearLayout>
+        </LinearLayout>
     </RelativeLayout>
 
 </com.google.android.material.card.MaterialCardView>

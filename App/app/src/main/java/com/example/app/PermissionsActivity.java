@@ -23,11 +23,9 @@ import java.util.Map;
 // Activity used to request permissions from user on startup.
 public class PermissionsActivity extends AppCompatActivity {
 
-    /*
-    Constant used to determine needed permissions. The key-value pair is used within
-    PermissionsActivity to obtain details of a permission. Permissions are defined this
-    way so that they can be coded in dynamically as needed.
-    */
+    // Constant used to determine needed permissions. The key-value pair is used within
+    // PermissionsActivity to obtain details of a permission. Permissions are defined this
+    // way so that they can be coded in dynamically as needed.
     private final HashMap<String, Permission> NEEDED_PERMISSIONS = new HashMap<String,
             Permission>() {{
         put("SMS", new Permission(

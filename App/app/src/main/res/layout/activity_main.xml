@@ -15,7 +15,7 @@
             android:id="@+id/menuOpenBtn"
             android:layout_width="30dp"
             android:layout_height="30dp"
-            android:layout_margin="10dp"
+            android:layout_margin="20dp"
             android:background="@drawable/ic_menu_icon"
             android:backgroundTint="@color/design_default_color_primary"
             android:clickable="true" />

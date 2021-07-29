@@ -14,12 +14,13 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+// This is the main utility class of the app. Its main purpose is to manage the
+// app's Shared Preferences, manage the app's PairedPC's, and provide important
+// app-wide functions.
 public class Utils {
     private static final String PAIRED_PCS_KEY = "pairedPcs";
-    private static final String PC_UUIDS_KEY = "pcUuids";
     private static final String FIRST_RUN_KEY = "firstRun";
     private static final String UUID_KEY = "uuid";
-
     private static SharedPreferences sharedPreferences;
     private static Utils utilsInstance = null;
     private static CopyOnWriteArrayList<PairedPC> pairedPCS;
@@ -38,17 +39,22 @@ public class Utils {
         return utilsInstance;
     }
 
+    // Initializes all the values and loads them into the Utils class.
     private static void initValues() {
+        // If a list of Paired PC's list exists in the app's Shared Preferences,
+        // load it into the Utils class.
         String pairedPCSValue = sharedPreferences.getString(PAIRED_PCS_KEY, null);
         if (pairedPCSValue != null) {
             Gson gson = new Gson();
             pairedPCS = gson.fromJson(pairedPCSValue,
                     new TypeToken<CopyOnWriteArrayList<PairedPC>>() {
                     }.getType());
+        // If not, make a new Paired PC's list.
         } else {
             pairedPCS = new CopyOnWriteArrayList<>();
         }
 
+        // Check if the app has already created a UUID. If not, create one.
         uuid = sharedPreferences.getString(UUID_KEY, null);
         if (uuid == null) {
             uuid = java.util.UUID.randomUUID().toString();
@@ -57,6 +63,7 @@ public class Utils {
 
     }
 
+    // Used to check if the app is on its first run.
     public boolean isFirstRun() {
         if (sharedPreferences.getBoolean(FIRST_RUN_KEY, true)) {
             sharedPreferences.edit().putBoolean(FIRST_RUN_KEY, false).apply();
@@ -90,7 +97,7 @@ public class Utils {
 
     public void addToPairedPCS(PairedPC pairedPC) {
         pairedPCS.add(pairedPC);
-        savePairedPCSToDevice();
+        savePairedPCSToSharePreferences();
     }
 
     public void removeFromPairedPCS(String address) {
@@ -100,10 +107,16 @@ public class Utils {
                 break;
             }
         }
-        savePairedPCSToDevice();
+        savePairedPCSToSharePreferences();
     }
 
-    public void savePairedPCSToDevice() {
+    public void setPCActive(String address, boolean active) {
+        PairedPC pairedPC = getPairedPC(address);
+        pairedPC.setActive(active);
+        savePairedPCSToSharePreferences();
+    }
+
+    private void savePairedPCSToSharePreferences() {
         SharedPreferences.Editor prefsEditor = sharedPreferences.edit();
         Gson gson = new Gson();
         String json = gson.toJson(pairedPCS);
@@ -115,7 +128,8 @@ public class Utils {
         return java.util.UUID.fromString(uuid);
     }
 
-    public boolean isConnected(String address) {
+    // This method checks if bluetooth devices are actually connected or not.
+    public static boolean isConnected(String address) {
         Set<BluetoothDevice> pairedDevices = BluetoothAdapter.getDefaultAdapter()
                 .getBondedDevices();
 

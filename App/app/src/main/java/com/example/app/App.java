@@ -6,7 +6,6 @@ import android.os.Build;
 import android.util.Log;
 
 public class App extends android.app.Application {
-
     public static final String CONNECTED_DEVICES_CHANNEL_ID = "connected_devices";
     public static final String DISCONNECTED_DEVICES_CHANNEL_ID = "disconnected_devices";
     private static final String TAG = "App";
