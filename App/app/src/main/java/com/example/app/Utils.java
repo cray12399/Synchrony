@@ -7,6 +7,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.util.Log;
+import android.util.Pair;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
@@ -173,6 +174,19 @@ public class Utils {
             BluetoothConnectionThread bluetoothConnectionThread) {
         bluetoothConnectionThread.start();
         currentlyRunningThreads.add(bluetoothConnectionThread);
+    }
+
+    public static boolean isThreadRunning(String pcAddress) {
+        for (PairedPC pairedPC : sPairedPCS) {
+            if (pairedPC.getAddress().equals(pcAddress)) {
+                for (BluetoothConnectionThread bluetoothConnectionThread :
+                        currentlyRunningThreads) {
+                    return bluetoothConnectionThread.isAlive();
+                }
+            }
+        }
+
+        return false;
     }
 
     public static boolean isForegroundRunning() {

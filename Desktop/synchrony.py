@@ -4,6 +4,8 @@ import bluetooth
 import pydbus
 import os
 
+# TODO: Create connection directly using QR code with UUID.
+
 
 def init_files():
     if not os.path.isdir("Config/"):

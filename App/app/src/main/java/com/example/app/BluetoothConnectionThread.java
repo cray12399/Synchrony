@@ -2,7 +2,6 @@ package com.example.app;
 
 import android.app.PendingIntent;
 import android.app.TaskStackBuilder;
-import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothServerSocket;
 import android.bluetooth.BluetoothSocket;
@@ -52,12 +51,13 @@ class BluetoothConnectionThread extends Thread {
     private long mSocketConnectedTime = -1;
     private long mLastServerHeartBeat = -1;
     private long mLastClientHeartBeat = -1;
-    private BluetoothServerSocket mBluetoothServerSocket;
     private BluetoothSocket mBluetoothSocket;
 
-    public BluetoothConnectionThread(Context context, BluetoothDevice device) {
+    public BluetoothConnectionThread(Context context, BluetoothDevice device,
+                                     BluetoothSocket bluetoothSocket) {
         this.mContext = context;
         this.mDevice = device;
+        this.mBluetoothSocket = bluetoothSocket;
 
         mNotificationID = (int) ((Math.random() * (999999999 - 100000000)) + 100000000);
 
@@ -128,60 +128,19 @@ class BluetoothConnectionThread extends Thread {
     public void run() {
         // Since the socketConnected field is transient, the thread needs to
         // set it as false so it isn't null
-        Objects.requireNonNull(Utils.getPairedPC(mDevice.getAddress())).setSocketConnected(false);
+        Objects.requireNonNull(Utils.getPairedPC(mDevice.getAddress())).setSocketConnected(true);
+        notifySocketConnectionChange();
 
-        boolean runThread = true;
-        while (runThread) {
-            // The thread starts by creating a listening notification and trying to create
-            // a BluetoothServerSocket
-            createNotification(false);
-            mBluetoothServerSocket = null;
-            while (runThread && mBluetoothServerSocket == null) {
-                mBluetoothServerSocket = getBluetoothServerSocket();
+        mSocketConnectedTime = System.currentTimeMillis();
 
-                runThread = !interrupted();
-            }
+        // Create a connected notification, and begin managing the connection.
+        createNotification();
 
-            // Once the BluetoothServerSocket is created, try to create a
-            // BluetoothSocket connection.
-            while (runThread && !Objects.requireNonNull(
-                    Utils.getPairedPC(mDevice.getAddress())).isSocketConnected()) {
-                Log.d(TAG, String.format("run: Creating socket for device: %s...", mDeviceTag));
-                mBluetoothSocket = getBluetoothSocket();
-
-                // If a socket connection was created, set the socketConnected
-                // field of the PairedPC to true.
-                if (mBluetoothSocket != null) {
-                    Log.d(TAG, String.format("run: Socket created for device: %s!",
-                            mDeviceTag));
-                    Objects.requireNonNull(Utils.getPairedPC(
-                            mDevice.getAddress())).setSocketConnected(true);
-                }
-
-                runThread = !interrupted();
-            }
-
-            // Now that the BluetoothSocket is connected create a connected notification,
-            // and begin managing the connection.
-            if (Objects.requireNonNull(
-                    Utils.getPairedPC(mDevice.getAddress())).isSocketConnected()) {
-                createNotification(true);
-            }
-            while (runThread && Objects.requireNonNull(
-                    Utils.getPairedPC(mDevice.getAddress())).isSocketConnected()) {
-                manageConnectedSocket();
-
-                runThread = !interrupted();
-            }
-
-            // If the socket is disconnected or the thread is interrupted, close
-            // the sockets and reset the socket timings
-            closeSockets();
-            resetTimings();
+        while (!interrupted()) {
+            manageConnectedSocket();
         }
 
-        closeSockets();
-        resetTimings();
+        closeSocket();
 
         // If the thread is interrupted, remove the notification.
         NotificationManagerCompat notificationManager = NotificationManagerCompat.from(mContext);
@@ -206,11 +165,11 @@ class BluetoothConnectionThread extends Thread {
                             String clipboard = intent.getStringExtra(CLIPBOARD_KEY);
                             boolean sendSuccessful = sendCommand(mBluetoothSocket,
                                     String.format("incoming_clipboard: %s", clipboard).getBytes());
-                            Objects.requireNonNull(Utils.getPairedPC(
-                                    mDevice.getAddress())).setSocketConnected(sendSuccessful);
 
                             if (sendSuccessful) {
                                 mLastClientHeartBeat = System.currentTimeMillis();
+                            } else {
+                                interrupt();
                             }
                             break;
                         }
@@ -259,13 +218,6 @@ class BluetoothConnectionThread extends Thread {
                 .registerReceiver(mBluetoothConnectionThreadReceiver, filter);
     }
 
-    /** Used to reset the bluetooth timings in case a connection is closed. */
-    private void resetTimings() {
-        mSocketConnectedTime = -1;
-        mLastServerHeartBeat = -1;
-        mLastClientHeartBeat = -1;
-    }
-
     /** Main function which manages the PC's connection. Handles client command
      * and tracks the connection status using heartbeats */
     private void manageConnectedSocket() {
@@ -274,8 +226,7 @@ class BluetoothConnectionThread extends Thread {
             if (!clientCommand.equals("Receive Failure")) {
                 handleCommand(clientCommand);
             } else {
-                Objects.requireNonNull(Utils.getPairedPC(mDevice.getAddress()))
-                        .setSocketConnected(false);
+                interrupt();
             }
         }
 
@@ -289,8 +240,7 @@ class BluetoothConnectionThread extends Thread {
                 // client heart beat time is more than 10 seconds, assume the socket
                 // connection is closed.
                 if (mLastServerHeartBeat - mLastClientHeartBeat > socketTimeout) {
-                    Objects.requireNonNull(Utils.getPairedPC(
-                            mDevice.getAddress())).setSocketConnected(false);
+                    interrupt();
                     Log.d(TAG, "manageConnectedSocket: " +
                             "No response from client. Socket connection timeout.");
                 }
@@ -299,9 +249,8 @@ class BluetoothConnectionThread extends Thread {
                 // connection is closed.
             } else if (System.currentTimeMillis() - mSocketConnectedTime > socketTimeout) {
                 Log.d(TAG, "manageConnectedSocket: " +
-                        "No response from client. Socket connection timeout.");
-                Objects.requireNonNull(
-                        Utils.getPairedPC(mDevice.getAddress())).setSocketConnected(false);
+                        "No initial response from client. Socket connection timeout.");
+                interrupt();
             }
         }
 
@@ -310,14 +259,15 @@ class BluetoothConnectionThread extends Thread {
     }
 
     /** Method closes the BluetoothServerSocket and BluetoothSocket when they aren't needed. */
-    private void closeSockets() {
+    private void closeSocket() {
         if (mBluetoothSocket != null) {
             try {
                 Log.d(TAG, String.format("closeSockets: " +
                         "Closing bluetooth socket for device: %s...", mDeviceTag));
                 mBluetoothSocket.close();
-                Objects.requireNonNull(Utils.getPairedPC(
-                        mDevice.getAddress())).setSocketConnected(false);
+                interrupt();
+                Objects.requireNonNull(
+                        Utils.getPairedPC(mDevice.getAddress())).setSocketConnected(false);
                 notifySocketConnectionChange();
                 Log.d(TAG, String.format("closeSockets: " +
                         "Bluetooth socket closed for device: %s!", mDeviceTag));
@@ -326,91 +276,13 @@ class BluetoothConnectionThread extends Thread {
                         "Error closing bluetooth socket thread for device: %s!", mDeviceTag), e);
             }
         }
-
-        if (mBluetoothServerSocket != null) {
-            try {
-                Log.d(TAG, String.format("closeSockets: " +
-                        "Closing bluetooth server socket for device %s!", mDeviceTag));
-                mBluetoothServerSocket.close();
-                Log.d(TAG, String.format("closeSockets: " +
-                        "Bluetooth server socket closed for device %s!", mDeviceTag));
-            } catch (IOException e) {
-                Log.e(TAG, String.format("closeSockets: " +
-                        "Error closing bluetooth server socket for device: %s!", mDeviceTag), e);
-            }
-        }
-    }
-
-    public BluetoothServerSocket getBluetoothServerSocket() {
-        BluetoothServerSocket tmp = null;
-        try {
-            BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
-
-            Log.d(TAG, String.format("run: " +
-                    "Creating bluetooth server socket for device: %s...", mDeviceTag));
-            tmp = bluetoothAdapter.listenUsingRfcommWithServiceRecord(
-                    mContext.getString(R.string.app_name), Utils.getUuid());
-            Log.d(TAG, String.format("run: Bluetooth server socket " +
-                    "created for device: %s...", mDeviceTag));
-
-            // Cancel discovery because it otherwise slows down the connection.
-            bluetoothAdapter.cancelDiscovery();
-        } catch (IOException e) {
-            Log.e(TAG, String.format("run: " +
-                            "Creation of bluetooth server socket for device: %s FAILED! ",
-                    mDeviceTag), e);
-            // Timeout in case of failure to create BluetoothServerSocket.
-            SystemClock.sleep(5000);
-        }
-        mBluetoothServerSocket = tmp;
-
-        return mBluetoothServerSocket;
-    }
-
-    public BluetoothSocket getBluetoothSocket() {
-        BluetoothSocket bluetoothSocket = null;
-        try {
-            if (!interrupted() && mBluetoothServerSocket != null) {
-                Log.d(TAG, String.format("getBluetoothSocket: " +
-                        "Listening for client from device: %s...", mDeviceTag));
-                if (BluetoothAdapter.getDefaultAdapter().isEnabled()) {
-                    bluetoothSocket = mBluetoothServerSocket.accept(2000);
-                }
-            }
-        } catch (IOException e) {
-            // If statement so that the log is not constantly getting timeout exceptions.
-            if (!e.toString().contains("Try again")) {
-                Log.e(TAG, String.format("getBluetoothSocket: " +
-                        "Error connecting to client for device: %s! ", mDeviceTag), e);
-            }
-        }
-
-        if (bluetoothSocket != null) {
-            // If the socket is not the target device, disconnect it and try again.
-            if (bluetoothSocket.getRemoteDevice().getAddress().equals(mDevice.getAddress())) {
-                Log.d(TAG, String.format("getBluetoothSocket: " +
-                        "Socket created for device: %s!", mDeviceTag));
-                mSocketConnectedTime = System.currentTimeMillis();
-                notifySocketConnectionChange();
-                return bluetoothSocket;
-            } else {
-                try {
-                    bluetoothSocket.close();
-                } catch (IOException e) {
-                    Log.e(TAG, String.format("getBluetoothSocket: " +
-                            "Error closing socket for device: %s!", mDeviceTag), e);
-                }
-            }
-        }
-
-        return null;
     }
 
     /**
      * Creates the notification for the thread. Connected boolean changes the content
      * of the notification to reflect the connection status.
      */
-    private void createNotification(boolean connected) {
+    private void createNotification() {
         // This intent is used to allow the user to set the PC as inactive from the notification
         Intent stopSyncIntent = new Intent();
         stopSyncIntent.setAction(STOP_SYNC_ACTION);
@@ -433,19 +305,13 @@ class BluetoothConnectionThread extends Thread {
                         mContext, connectedDevicesChannelID)
                         .setSmallIcon(R.drawable.ic_placeholder_logo)
                         .setContentTitle(mDevice.getName())
+                        .setContentText("Connected to device!")
                         .setGroup(CONNECTED_PC_GROUP)
                         .setPriority(NotificationCompat.PRIORITY_HIGH)
                         .setOngoing(true)
                         .setContentIntent(detailsPendingIntent)
                         .addAction(R.drawable.ic_pc_disconnected,
                                 "Stop Sync", stopSyncPendingIntent);
-
-        // If the device is connected, reflect that in the notification content.
-        if (connected) {
-            connectedNotification.setContentText("Connected to device!");
-        } else {
-            connectedNotification.setContentText("Listening for device...");
-        }
 
         notificationManager.notify(mDevice.getAddress(),
                 mNotificationID, connectedNotification.build());
@@ -480,8 +346,7 @@ class BluetoothConnectionThread extends Thread {
                 Log.e(TAG, String.format("sendHeartbeat: " +
                         "Couldn't send heartbeat to client for device: %s!", mDeviceTag), e);
                 // If a heartbeat could not be sent, assume the connection no longer exists.
-                Objects.requireNonNull(Utils.getPairedPC(
-                        mDevice.getAddress())).setSocketConnected(false);
+                interrupt();
             }
             // Set the last heartbeat time to keep track of timing.
             mLastServerHeartBeat = System.currentTimeMillis();

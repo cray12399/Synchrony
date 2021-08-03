@@ -71,31 +71,6 @@ public class PCRecViewAdapter extends RecyclerView.Adapter<PCRecViewAdapter.View
         holder.pcSyncingSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
             Utils.notifySyncChanged(mContext.getApplicationContext(), listedPC.getAddress());
 
-            if (!isChecked) {
-                for (BluetoothConnectionThread bluetoothConnectionThread :
-                        Utils.getCurrentlyRunningThreads()) {
-                    if (listedPC.getAddress()
-                            .equals(bluetoothConnectionThread.getDeviceAddress())) {
-                        if (bluetoothConnectionThread.isAlive()) {
-                            new Thread() {
-                                @Override
-                                public void run() {
-                                    ((MainActivity) mContext).runOnUiThread(() -> {
-                                        holder.pcSyncingSwitch.setEnabled(false);
-                                    });
-                                    while (bluetoothConnectionThread.isAlive()) {
-                                        SystemClock.sleep(10);
-                                    }
-                                    ((MainActivity) mContext).runOnUiThread(() -> {
-                                        holder.pcSyncingSwitch.setEnabled(true);
-                                    });
-                                }
-                            }.start();
-                        }
-                    }
-                }
-            }
-
             Objects.requireNonNull(
                     Utils.getPairedPC(listedPC.getAddress())).setSyncing(isChecked);
         });

@@ -68,7 +68,6 @@ public class PCDetailsActivity extends AppCompatActivity {
 
                         case BluetoothConnectionThread.SOCKET_CONNECTION_CHANGE_ACTION:
                             mPairedPC = Utils.getPairedPC(recipientAddress);
-                            assert mPairedPC != null;
                             mSyncBtn.setEnabled(mPairedPC.isSocketConnected());
                             mSendClipboardBtn.setEnabled(mPairedPC.isSocketConnected());
                             mSendFileBtn.setEnabled(mPairedPC.isSocketConnected());
