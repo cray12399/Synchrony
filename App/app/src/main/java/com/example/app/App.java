@@ -5,14 +5,22 @@ import android.app.NotificationManager;
 import android.os.Build;
 import android.util.Log;
 
+/**
+ * The starting point of the app. Notification channels are all created here.
+ */
+
 public class App extends android.app.Application {
-    public static final String CONNECTED_DEVICES_CHANNEL_ID = "connected_devices";
+    // Notification channel ID's.
+    public static final String connectedDevicesChannelID = "connected_devices";
     public static final String DISCONNECTED_DEVICES_CHANNEL_ID = "disconnected_devices";
+    // Logging tag variable.
     private static final String TAG = "App";
 
     @Override
     public void onCreate() {
         super.onCreate();
+
+        Utils.initValues(this);
 
         // Create notification channels
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -21,14 +29,16 @@ public class App extends android.app.Application {
         }
     }
 
-    // Creates the channel that contains the ongoing notifications for connected PC's.
+    /**
+     * Creates the channel that contains the notifications for connected PC's
+     */
+
     private void createConnectedPCNotificationChannel() {
         NotificationChannel connectedDevicesChannel = new NotificationChannel(
-                CONNECTED_DEVICES_CHANNEL_ID,
+                connectedDevicesChannelID,
                 "Connected Devices",
                 NotificationManager.IMPORTANCE_DEFAULT);
         connectedDevicesChannel.setDescription("Contains notifications for connected devices");
-        connectedDevicesChannel.enableVibration(false);
 
         NotificationManager notificationManager = getSystemService(NotificationManager.class);
         notificationManager.createNotificationChannel(connectedDevicesChannel);
@@ -36,7 +46,10 @@ public class App extends android.app.Application {
         Log.d(TAG, "createConnectedPCNotificationChannel: Channel Created!");
     }
 
-    // Creates the channel that contains the disconnected PC notifications.
+    /**
+     * Creates the channel that contains the notifications for when a PC is disconnected
+     */
+
     private void createDisconnectedPCNotificationChannel() {
         NotificationChannel disconnectedDevicesChannel = new NotificationChannel(
                 DISCONNECTED_DEVICES_CHANNEL_ID,

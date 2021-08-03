@@ -43,7 +43,7 @@
                     android:layout_marginStart="5dp"/>
 
                 <androidx.appcompat.widget.SwitchCompat
-                    android:id="@+id/pcActiveSwitch"
+                    android:id="@+id/pcSyncingSwitch"
                     style="@style/SwitchOnPrimary"
                     android:layout_width="wrap_content"
                     android:layout_height="10dp"

@@ -1,10 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context=".PCDetailActivity"
+    tools:context=".PCDetailsActivity"
     android:orientation="vertical"
     android:padding="20dp"
     android:gravity="center_horizontal">
@@ -18,14 +17,14 @@
             android:layout_height="30dp"
             android:background="@drawable/ic_back_button"
             android:backgroundTint="@color/design_default_color_primary"
-            android:id="@+id/backButton"/>
+            android:id="@+id/backBtn" />
 
         <androidx.appcompat.widget.SwitchCompat
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_alignParentEnd="true"
             style="@style/SwitchOnPrimary"
-            android:id="@+id/pcActiveSwitch"/>
+            android:id="@+id/pcSyncingSwitch"/>
     </RelativeLayout>
 
     <TextView
@@ -115,7 +114,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="5dp"
         android:text="Send Clipboard"
-        android:id="@+id/sendClipboardButton"/>
+        android:id="@+id/sendClipboardBtn" />
 
     <Button
         android:layout_width="250dp"

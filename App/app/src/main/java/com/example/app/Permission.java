@@ -2,27 +2,30 @@ package com.example.app;
 
 import java.io.Serializable;
 
-// Class used to contain permission details within PermissionsActivity.
+/**
+ * Class used to contain permission details within PermissionsActivity.
+ */
 public class Permission implements Serializable {
-    private final String manifestPermission;
-    private final String description;
-    private final int requestCode;
+    // Constructor variables.
+    private final String mManifestPermission;
+    private final String mDescription;
+    private final int mRequestCode;
 
     public Permission(String manifestPermission, String description, int requestCode) {
-        this.manifestPermission = manifestPermission;
-        this.description = description;
-        this.requestCode = requestCode;
+        this.mManifestPermission = manifestPermission;
+        this.mDescription = description;
+        this.mRequestCode = requestCode;
     }
 
     public String getManifestPermission() {
-        return manifestPermission;
+        return mManifestPermission;
     }
 
     public String getDescription() {
-        return description;
+        return mDescription;
     }
 
     public int getRequestCode() {
-        return requestCode;
+        return mRequestCode;
     }
 }

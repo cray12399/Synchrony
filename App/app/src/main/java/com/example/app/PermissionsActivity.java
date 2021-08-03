@@ -12,6 +12,7 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.SwitchCompat;
 import androidx.core.content.ContextCompat;
+import androidx.core.content.PermissionChecker;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -20,7 +21,9 @@ import java.util.HashMap;
 import java.util.Map;
 
 
-// Activity used to request permissions from user on startup.
+/**
+ * Activity used to request permissions from user on first startup.
+ */
 public class PermissionsActivity extends AppCompatActivity {
 
     // Constant used to determine needed permissions. The key-value pair is used within
@@ -46,10 +49,9 @@ public class PermissionsActivity extends AppCompatActivity {
                 103));
     }};
 
-    RecyclerView permissionsRecView;
-    PermissionsRecViewAdapter permissionsRecViewAdapter;
-    LinearLayoutManager permissionsRecViewLayoutManager;
-    TextView skipBtn;
+    // UI variables.
+    private PermissionsRecViewAdapter mPermissionsRecViewAdapter;
+    private LinearLayoutManager mPermissionsRecViewLayoutManager;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -57,27 +59,29 @@ public class PermissionsActivity extends AppCompatActivity {
         setContentView(R.layout.activity_permissions);
 
         // Used to display permissions in a card view layout with switches the user can press.
-        permissionsRecView = findViewById(R.id.permissionsRecView);
+        // UI variables.
+        RecyclerView permissionsRecView = findViewById(R.id.permissionsRecView);
 
         // Check which permissions have not been granted
         HashMap<String, Permission> permissionsNotGranted = new HashMap<>();
         for (Map.Entry<String, Permission> permission : NEEDED_PERMISSIONS.entrySet()) {
             if (ContextCompat.checkSelfPermission(PermissionsActivity.this,
-                    permission.getValue().getManifestPermission()) == -1) {
+                    permission.getValue().getManifestPermission()) ==
+                    PermissionChecker.PERMISSION_DENIED) {
                 permissionsNotGranted.put(permission.getKey(), permission.getValue());
             }
         }
 
         // Display permissions in a linear card view layout.
-        permissionsRecViewAdapter = new PermissionsRecViewAdapter(this,
+        mPermissionsRecViewAdapter = new PermissionsRecViewAdapter(this,
                 permissionsNotGranted);
-        permissionsRecViewLayoutManager = new LinearLayoutManager(this,
+        mPermissionsRecViewLayoutManager = new LinearLayoutManager(this,
                 LinearLayoutManager.VERTICAL, false);
-        permissionsRecView.setLayoutManager(permissionsRecViewLayoutManager);
-        permissionsRecView.setAdapter(permissionsRecViewAdapter);
+        permissionsRecView.setLayoutManager(mPermissionsRecViewLayoutManager);
+        permissionsRecView.setAdapter(mPermissionsRecViewAdapter);
 
         // Allows user to skip permissions screen if they choose.
-        skipBtn = findViewById(R.id.skipBtn);
+        TextView skipBtn = findViewById(R.id.skipBtn);
         skipBtn.setOnClickListener(v -> {
             // Confirm just in case they accidentally pressed the button.
             AlertDialog.Builder builder = new AlertDialog
@@ -102,20 +106,20 @@ public class PermissionsActivity extends AppCompatActivity {
             if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 // Indices ArrayList used to figure out position of permission card for removal.
                 ArrayList<String> indices = new ArrayList<>(
-                        permissionsRecViewAdapter.permissionsNotGranted.keySet());
+                        mPermissionsRecViewAdapter.mPermissionsNotGranted.keySet());
                 for (Map.Entry<String, Permission> entry :
-                        permissionsRecViewAdapter.permissionsNotGranted.entrySet()) {
+                        mPermissionsRecViewAdapter.mPermissionsNotGranted.entrySet()) {
                     // Check which request code was provided and match it to proper permission
                     if (entry.getValue().getRequestCode() == requestCode) {
-                        View view = permissionsRecViewLayoutManager
+                        View view = mPermissionsRecViewLayoutManager
                                 .findViewByPosition(indices.indexOf(entry.getKey()));
                         if (view != null) {
                             // Check the switch and remove the CardView
                             SwitchCompat permissionGrantedSwitch = view
                                     .findViewById(R.id.permissionGrantedSwitch);
                             permissionGrantedSwitch.setChecked(true);
-                            permissionsRecViewAdapter.permissionsNotGranted.remove(entry.getKey());
-                            permissionsRecViewAdapter.notifyItemRemoved(
+                            mPermissionsRecViewAdapter.mPermissionsNotGranted.remove(entry.getKey());
+                            mPermissionsRecViewAdapter.notifyItemRemoved(
                                     indices.indexOf(entry.getKey()));
                         }
                         break;
@@ -124,7 +128,7 @@ public class PermissionsActivity extends AppCompatActivity {
             }
         }
         // If all permissions are granted, continue to MainActivity
-        if (permissionsRecViewAdapter.getItemCount() == 0) {
+        if (mPermissionsRecViewAdapter.getItemCount() == 0) {
             continueToMainActivity();
         }
     }
@@ -133,12 +137,10 @@ public class PermissionsActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
 
-        /*
-        Clone of permissionsNotGranted list to avoid exceptions when removing items
-        from within foreach iterator.
-        */
+        // Clone of permissionsNotGranted list to avoid exceptions when removing items
+        // from within foreach iterator.
         HashMap<String, Permission> permissionsToCheck = new HashMap<>(
-                permissionsRecViewAdapter.permissionsNotGranted);
+                mPermissionsRecViewAdapter.mPermissionsNotGranted);
         // Iterate over permissions upon resuming of PermissionsActivity and update list accordingly
         for (Map.Entry<String, Permission> entry :
                 permissionsToCheck.entrySet()) {
@@ -146,20 +148,19 @@ public class PermissionsActivity extends AppCompatActivity {
                     entry.getValue().getManifestPermission())
                     == PackageManager.PERMISSION_GRANTED) {
 
-                permissionsRecViewAdapter.permissionsNotGranted.remove(entry.getKey());
-                permissionsRecViewAdapter.notifyDataSetChanged();
+                mPermissionsRecViewAdapter.mPermissionsNotGranted.remove(entry.getKey());
+                mPermissionsRecViewAdapter.notifyDataSetChanged();
             }
         }
 
         // If all permissions are granted, continue to MainActivity
-        if (permissionsRecViewAdapter.getItemCount() == 0) {
+        if (mPermissionsRecViewAdapter.getItemCount() == 0) {
             continueToMainActivity();
         }
     }
 
     @Override
     public void onBackPressed() {
-        // Send the user home instead of to StartupActivity on back press
         Intent homeIntent = new Intent(Intent.ACTION_MAIN);
         homeIntent.addCategory(Intent.CATEGORY_HOME);
         homeIntent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
@@ -167,7 +168,6 @@ public class PermissionsActivity extends AppCompatActivity {
     }
 
     private void continueToMainActivity() {
-        // Made a separate function so that I am not reusing a code block.
         Intent mainActivityIntent = new Intent(PermissionsActivity.this,
                 MainActivity.class);
         startActivity(mainActivityIntent);

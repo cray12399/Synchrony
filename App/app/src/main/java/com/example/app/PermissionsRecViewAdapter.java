@@ -25,17 +25,20 @@ import java.util.HashMap;
 import java.util.Map;
 
 
-// Class used to  display CardViews that allow user to grant permissions on the PermissionsActivity
+/**
+ * Class used to  display CardViews that allow user to grant permissions on the PermissionsActivity
+ */
 public class PermissionsRecViewAdapter extends RecyclerView.Adapter<PermissionsRecViewAdapter
         .ViewHolder> {
 
-    private final Context CONTEXT;
-    public HashMap<String, Permission> permissionsNotGranted;
+    // Constructor variables.
+    private final Context mContext;
+    public HashMap<String, Permission> mPermissionsNotGranted;
 
     public PermissionsRecViewAdapter(Context CONTEXT,
-                                     HashMap<String, Permission> PERMISSIONS_NOT_GRANTED) {
-        this.CONTEXT = CONTEXT;
-        this.permissionsNotGranted = PERMISSIONS_NOT_GRANTED;
+                                     HashMap<String, Permission> permissionsNotGranted) {
+        this.mContext = CONTEXT;
+        this.mPermissionsNotGranted = permissionsNotGranted;
     }
 
     @NonNull
@@ -49,8 +52,8 @@ public class PermissionsRecViewAdapter extends RecyclerView.Adapter<PermissionsR
     @Override
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         // Get the indices of permissions not granted so that they can be accurately displayed.
-        ArrayList<String> indices = new ArrayList<>(permissionsNotGranted.keySet());
-        for (Map.Entry<String, Permission> entry: permissionsNotGranted.entrySet()) {
+        ArrayList<String> indices = new ArrayList<>(mPermissionsNotGranted.keySet());
+        for (Map.Entry<String, Permission> entry : mPermissionsNotGranted.entrySet()) {
             if (indices.indexOf(entry.getKey()) == position) {
                 holder.permissionNameTxt.setText(entry.getKey());
 
@@ -59,7 +62,7 @@ public class PermissionsRecViewAdapter extends RecyclerView.Adapter<PermissionsR
                         .setOnCheckedChangeListener((buttonView, isChecked) -> {
                             String neededPermission = entry.getValue().getManifestPermission();
                             if (neededPermission != null) {
-                                if (ActivityCompat.checkSelfPermission(CONTEXT, neededPermission)
+                                if (ActivityCompat.checkSelfPermission(mContext, neededPermission)
                                         != PackageManager.PERMISSION_GRANTED) {
                                     // Switch isn't checked unless the permission is granted
                                     holder.permissionGrantedSwitch.setChecked(false);
@@ -72,7 +75,7 @@ public class PermissionsRecViewAdapter extends RecyclerView.Adapter<PermissionsR
 
                 // Description button so users can understand why they need to give permission
                 holder.permissionDescriptionButton.setOnClickListener(v -> {
-                    AlertDialog.Builder builder = new AlertDialog.Builder(CONTEXT);
+                    AlertDialog.Builder builder = new AlertDialog.Builder(mContext);
                     builder.setTitle("Why?");
                     builder.setMessage(entry.getValue().getDescription());
                     builder.setPositiveButton("Close",
@@ -87,7 +90,7 @@ public class PermissionsRecViewAdapter extends RecyclerView.Adapter<PermissionsR
 
     @Override
     public int getItemCount() {
-        return permissionsNotGranted.size();
+        return mPermissionsNotGranted.size();
     }
 
     private void getPermission(View itemView, Map.Entry<String, Permission> entry) {
@@ -97,27 +100,26 @@ public class PermissionsRecViewAdapter extends RecyclerView.Adapter<PermissionsR
         int requestCode = entry.getValue().getRequestCode();
 
         // If the app doesn't need to show a rationale, show permission dialog.
-        if (!ActivityCompat.shouldShowRequestPermissionRationale((Activity) CONTEXT,
+        if (!ActivityCompat.shouldShowRequestPermissionRationale((Activity) mContext,
                 neededPermission)) {
-            ActivityCompat.requestPermissions((Activity) CONTEXT,
+            ActivityCompat.requestPermissions((Activity) mContext,
                     new String[]{neededPermission},
                     requestCode);
         } else {
-            // Else, show SnackBar to show rationale and send user to app settings page.
+            // If not, show SnackBar to show rationale and send user to app settings page.
             Snackbar.make(itemView,
                     permissionDescription,
                     Snackbar.LENGTH_LONG).setAction("Grant...", v -> {
                 Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                        Uri.fromParts("package", CONTEXT.getPackageName(),
+                        Uri.fromParts("package", mContext.getPackageName(),
                                 null));
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                CONTEXT.startActivity(intent);
+                mContext.startActivity(intent);
             }).show();
         }
     }
 
     public static class ViewHolder extends RecyclerView.ViewHolder {
-
         private final TextView permissionNameTxt;
         private final SwitchCompat permissionGrantedSwitch;
         private final ImageButton permissionDescriptionButton;

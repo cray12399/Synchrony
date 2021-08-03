@@ -1,21 +1,22 @@
 package com.example.app;
 
 import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothDevice;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.os.Bundle;
 import android.os.Handler;
-import android.os.SystemClock;
+import android.util.Log;
 import android.view.View;
 import android.view.animation.Animation;
 import android.view.animation.AnimationUtils;
 import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.RelativeLayout;
-import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.widget.SwitchCompat;
 import androidx.core.view.GravityCompat;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -23,29 +24,55 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.snackbar.Snackbar;
 
-import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.ArrayList;
 
-// This is the main activity for the app. This activity contains the drawer menu for the app and
-// lists all of the PairedPCs for the user to interact with.
+/**
+ * This is the main activity for the app. This activity contains the drawer menu for the app and
+ * lists all of the PairedPCs for the user to interact with.
+ */
 public class MainActivity extends AppCompatActivity {
-    private DrawerLayout menuDrawer;
-    private TextView noPairText;
-    private Button pairBtn;
-    private RelativeLayout pcListLayout;
-    private RelativeLayout unpairedLayout;
-    private PCRecViewAdapter pcRecViewAdapter;
-    private LinearLayoutManager pcRecViewLayoutManager;
-    private PCRecViewUpdateThread pcRecViewUpdateThread;
+    // Action variables.
+    public static final String ADD_TO_PC_LIST = "addToPCList";
+    public static final String ADDED_PC_KEY = "addedPCKey";
+    // Logging tag variables.
+    private static final String TAG = "MainActivity";
+    // Used to list paired PC's in pcRecViewAdapter
+    private final ArrayList<PairedPC> mListedPCS = new ArrayList<>();
+    // UI Variables
+    private DrawerLayout mMenuDrawer;
+    private Button mPairBtn;
+    private RelativeLayout mPCListLayout;
+    private RelativeLayout mUnpairedLayout;
+    private PCRecViewAdapter mPCRecViewAdapter;
+    private Snackbar mBTDisconnectedSnackbar;
+
+    /**
+     * Static method that allows other classes tell the MainActivity to add a PC to pcRecView.
+     */
+    public static void addToMainActivity(Context applicationContext,
+                                         BluetoothDevice bluetoothDevice) {
+        Intent setPCSyncingIntent = new Intent();
+        setPCSyncingIntent.setAction(MainActivity.ADD_TO_PC_LIST);
+        setPCSyncingIntent.putExtra(MainActivity.ADDED_PC_KEY,
+                bluetoothDevice.getAddress());
+        applicationContext.sendBroadcast(setPCSyncingIntent);
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        // Start the main service, BluetoothSyncService in the foreground.
-        Intent syncServiceIntent = new Intent(this, BluetoothSyncService.class);
-        startForegroundService(syncServiceIntent);
 
+        initializeUI();
+        initializePCListing();
+        registerReceiver();
+    }
+
+    /**
+     * Initializes the main ui elements of MainActivity
+     */
+    private void initializeUI() {
         // Set up the hamburger menu button and set it to rotate when pressed.
         ImageButton menuOpenBtn = findViewById(R.id.menuOpenBtn);
         menuOpenBtn.setOnClickListener(v -> {
@@ -55,13 +82,15 @@ public class MainActivity extends AppCompatActivity {
 
             // Used a handler to delay the opening of the drawer so that the animation can be shown.
             Handler handler = new Handler();
-            menuDrawer = findViewById(R.id.drawerLayout);
-            handler.postDelayed(() -> menuDrawer.openDrawer(GravityCompat.START), 100);
+            mMenuDrawer = findViewById(R.id.drawerLayout);
+            handler.postDelayed(() -> mMenuDrawer.openDrawer(GravityCompat.START), 100);
+            Log.d(TAG, "onCreate: Menu drawer opened!");
         });
 
         // Set up the pair button to open the bluetooth menu when clicked.
-        pairBtn = findViewById(R.id.pairBtn);
-        pairBtn.setOnClickListener(v -> {
+        mPairBtn = findViewById(R.id.pairBtn);
+        mPairBtn.setOnClickListener(v -> {
+            Log.d(TAG, "onCreate: Opening bluetooth settings...");
             Intent intentOpenBluetoothSettings = new Intent();
             intentOpenBluetoothSettings.setAction(
                     android.provider.Settings.ACTION_BLUETOOTH_SETTINGS);
@@ -70,208 +99,165 @@ public class MainActivity extends AppCompatActivity {
 
         // Initialize the pcRecView.
         RecyclerView pcRecView = findViewById(R.id.pcRecView);
-        pcRecViewLayoutManager = new LinearLayoutManager(
+        LinearLayoutManager pcRecViewLayoutManager = new LinearLayoutManager(
                 MainActivity.this, LinearLayoutManager.VERTICAL,
                 false);
-        pcRecViewAdapter = new PCRecViewAdapter(MainActivity.this,
-                new CopyOnWriteArrayList<>());
+        mPCRecViewAdapter = new PCRecViewAdapter(MainActivity.this, mListedPCS);
         pcRecView.setLayoutManager(pcRecViewLayoutManager);
-        pcRecView.setAdapter(pcRecViewAdapter);
+        pcRecView.setAdapter(mPCRecViewAdapter);
 
-        // Start thread used to monitor Paired PCs and update the pcRecView accordingly.
-        noPairText = findViewById(R.id.noPairText);
-        pcListLayout = findViewById(R.id.pcListLayout);
-        unpairedLayout = findViewById(R.id.unpairedLayout);
-        pcRecViewUpdateThread = new PCRecViewUpdateThread(this, pcRecViewLayoutManager);
-        pcRecViewUpdateThread.start();
+        mUnpairedLayout = findViewById(R.id.unpairedLayout);
+
+        // btDisconnectSnackbar used to prompt the user to re-enable bluetooth.
+        mBTDisconnectedSnackbar = Snackbar.make(mUnpairedLayout,
+                "Bluetooth not enabled!",
+                Snackbar.LENGTH_INDEFINITE);
+        mBTDisconnectedSnackbar.setAction("Enable", v -> {
+            BluetoothAdapter.getDefaultAdapter().enable();
+            Log.d(TAG, "onCreate: Bluetooth enabled by user!");
+        });
+
+        mPCListLayout = findViewById(R.id.pcListLayout);
     }
 
-    // This is the main background thread of the main activity. It will be used to update the
-    // pcRecView automatically.
-    public class PCRecViewUpdateThread extends Thread {
-        private final Context CONTEXT;
-        private final BluetoothAdapter BLUETOOTH_ADAPTER;
-        private final LinearLayoutManager PC_REC_VIEW_LAYOUT_MANAGER;
-        private final Snackbar btDisabledSnackBar;
+    /**
+     * Tries to start the BluetoothSyncService and initializes listing of PC's in pcRecView
+     */
+    private void initializePCListing() {
+        // Start the main service, BluetoothSyncService, if it isn't running.
+        if (!Utils.isForegroundRunning()) {
+            Intent syncServiceIntent = new Intent(this, BluetoothSyncService.class);
+            startForegroundService(syncServiceIntent);
+            Log.d(TAG, "initializePCListing: BluetoothSyncService started in foreground!");
+            // If it is running, try to populate the pcRecViewAdapter with connected Paired PC's.
+        } else {
+            for (PairedPC pairedPC : Utils.getPairedPCS()) {
+                String deviceTag = String.format("%s (%s)", pairedPC.getName(),
+                        pairedPC.getAddress());
 
-        // This boolean is used so that the thread isn't constantly showing the SnackBar.
-        private boolean shouldShowSnackBar = true;
-
-        public PCRecViewUpdateThread(Context context, LinearLayoutManager pcRecViewLayoutManager) {
-            this.CONTEXT = context;
-            this.PC_REC_VIEW_LAYOUT_MANAGER = pcRecViewLayoutManager;
-            this.BLUETOOTH_ADAPTER = BluetoothAdapter.getDefaultAdapter();
-
-            // SnackBar used to notify the user that bluetooth is not enabled and prompt them
-            // to enable it.
-            btDisabledSnackBar = Snackbar.make(menuDrawer,
-                    "Bluetooth is not enabled!",
-                    Snackbar.LENGTH_INDEFINITE)
-                    .setAction("Enable...", v -> BLUETOOTH_ADAPTER.enable());
-        }
-
-        @Override
-        public void run() {
-            // While loop used to cause thread to continuously update UI and look for connected PCS.
-            while (!interrupted()) {
-                // If the device doesn't have a bluetooth adapter, say the phone is not supported
-                // and notify the user.
-                if (BLUETOOTH_ADAPTER == null) {
-                    runOnUiThread(() -> pairBtn.setVisibility(View.GONE));
-                    runOnUiThread(() -> noPairText.setText("Sorry, phone unsupported."));
-                    break;
-
-                // If the adapter is enabled, begin working on updating the pcRecView
-                } else if (BLUETOOTH_ADAPTER.isEnabled()) {
-                    handleBTEnabled();
-
-                //If the adapter is not enabled, prompt user to enable and hide the pcRecView.
-                } else {
-                    handleBTDisabled();
+                boolean listed = false;
+                for (PairedPC listedPC : mListedPCS) {
+                    if (listedPC.getAddress().equals(pairedPC.getAddress())) {
+                        listed = true;
+                        break;
+                    }
                 }
-                SystemClock.sleep(1000);
-            }
-        }
 
-        private void handleBTDisabled() {
-            // Disable pair button if it is enabled.
-            if (pairBtn.isEnabled()) {runOnUiThread(() -> pairBtn.setEnabled(false));}
-
-            // If the app hasn't shown the SnackBar, show it.
-            if (shouldShowSnackBar) {
-                runOnUiThread(() -> pairBtn.setEnabled(false));
-                btDisabledSnackBar.show();
-
-                // Stop showing the SnackBar since it has already been shown.
-                shouldShowSnackBar = false;
-            }
-
-            // Toggle pair views so that the PC RecView is hidden and the Pair layout is shown.
-            togglePairViews(true);
-        }
-
-        private void handleBTEnabled() {
-            // If bluetooth is enabled, then set the SnackBar to show if it is disabled
-            // and dismiss the SnackBar if it already exists.
-            shouldShowSnackBar = true;
-            btDisabledSnackBar.dismiss();
-
-            // ConnectedPCs is this thread's copy of PairedPC's to compare to the
-            // utils PairedPC list
-            CopyOnWriteArrayList<PairedPC> connectedPCS = new CopyOnWriteArrayList<>();
-            Utils utils = Utils.getInstance(CONTEXT);
-            for (PairedPC pairedPC : utils.getPairedPCS()) {
-                // If a Paired PC in pairedPCS is connected, add it to the thread's list.
-                if (utils.isConnected(pairedPC.getAddress())) {
-                    connectedPCS.add(pairedPC);
+                if (!listed && Utils.isConnected(pairedPC.getAddress())) {
+                    mListedPCS.add(pairedPC);
+                    mPCRecViewAdapter.notifyDataSetChanged();
+                    Log.d(TAG, String.format("initializePCListing: " +
+                            "Added to pcRecView: Device: %s", deviceTag));
                 }
             }
+        }
 
-            // Enable pair button if it is disabled.
-            if (!pairBtn.isEnabled()) {
-                runOnUiThread(() -> pairBtn.setEnabled(true));
+        BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+        // If a bluetooth adapter exists, initialize the UI.
+        if (bluetoothAdapter != null) {
+            // If the bluetooth adapter is not enabled, hide pcListLayout,
+            // show unpairedLayout, disable pairBtn, show btDisconnectedSnackbar.
+            if (!BluetoothAdapter.getDefaultAdapter().isEnabled()) {
+                mPCListLayout.setVisibility(View.GONE);
+                mUnpairedLayout.setVisibility(View.VISIBLE);
+                mPairBtn.setEnabled(false);
+                mBTDisconnectedSnackbar.show();
+                Log.d(TAG, "initializePCListing: " +
+                        "Bluetooth not enabled! Prompting user to enable!");
+                // If it is enabled, begin listing all connected PC's
+            } else {
+                // If no PC's are found, show the unpaired layout
+                if (mListedPCS.size() == 0) {
+                    mPCListLayout.setVisibility(View.GONE);
+                    mUnpairedLayout.setVisibility(View.VISIBLE);
+                    Log.d(TAG, "initializePCListing: " +
+                            "No paired PC's found! Showing unpaired layout!");
+                }
             }
+        }
+    }
 
-            // Toggle pair views based on whether there are connected PCs
-            togglePairViews(connectedPCS.size() <= 0);
+    public void registerReceiver() {
+        BroadcastReceiver mainActivityReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                switch (intent.getAction()) {
+                    case ADD_TO_PC_LIST: {
+                        String pcAddress = intent.getStringExtra(ADDED_PC_KEY);
+                        System.out.println(pcAddress);
+                        addToPcRecViewAdapter(pcAddress);
+                    }
+                    case BluetoothAdapter.ACTION_STATE_CHANGED:
+                        switch (intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, -1)) {
+                            // If bluetooth is enabled, allow the user to pair devices
+                            // using pairBtn and dismiss btDisconnectedSnackbar
+                            case BluetoothAdapter.STATE_ON:
+                                mPairBtn.setEnabled(true);
+                                mBTDisconnectedSnackbar.dismiss();
+                                break;
 
-            // Update the list of PC's if there is a discrepancy in the PC count between
-            // pcRecView and connectedPCS
-            if (connectedPCS.size() != pcRecViewAdapter.getItemCount()) {
-                pcRecViewAdapter.connectedPCS = connectedPCS;
-                runOnUiThread(() -> {pcRecViewAdapter.notifyDataSetChanged();});
-            }
-
-            // Update active switch in case user sets the PC as inactive from somewhere else.
-            for (int viewNum = 0; viewNum < PC_REC_VIEW_LAYOUT_MANAGER.getChildCount(); viewNum++) {
-                View view = PC_REC_VIEW_LAYOUT_MANAGER
-                        .getChildAt(viewNum);
-                if (view != null) {
-                    TextView viewText = view.findViewById(R.id.pcAddressText);
-                    SwitchCompat viewSwitch = view.findViewById(R.id.pcActiveSwitch);
-                    String viewAddress = viewText.getText().toString();
-                    boolean isChecked = viewSwitch.isChecked();
-                    if (utils.getPairedPC(viewAddress) != null) {
-                        if (utils.getPairedPC(viewAddress).isActive() != isChecked) {
-                            runOnUiThread(() -> viewSwitch
-                                    .setChecked(utils.getPairedPC(viewAddress).isActive()));
+                            // If bluetooth is disabled, hide and clear pc list and disable
+                            // pairing. Show btDisconnectedSnackbar.
+                            case BluetoothAdapter.STATE_OFF:
+                                mUnpairedLayout.setVisibility(View.VISIBLE);
+                                mPCListLayout.setVisibility(View.GONE);
+                                mPairBtn.setEnabled(false);
+                                mBTDisconnectedSnackbar.show();
+                                mListedPCS.clear();
+                                Log.d(TAG, "onReceive: " +
+                                        "Bluetooth not enabled! Prompting user to enable!");
+                                break;
                         }
+                        // If a device is connected, remove it from pcRecViewAdapter
+                    case BluetoothDevice.ACTION_ACL_DISCONNECTED: {
+                        BluetoothDevice bluetoothDevice = intent
+                                .getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+                        if (bluetoothDevice != null) {
+                            removeFromPcRecViewAdapter(bluetoothDevice);
+                        }
+                        break;
                     }
                 }
             }
-        }
+        };
 
-        private void togglePairViews(boolean noPair) {
-            if (noPair) {
-                // Show the unpaired layout if no PC is paired.
-                if (unpairedLayout.getVisibility() == View.GONE) {
-                    runOnUiThread(() -> unpairedLayout.setVisibility(View.VISIBLE));
-                }
-                // Hide the PC list layout if no PC is paired
-                if (pcListLayout.getVisibility() == View.VISIBLE) {
-                    runOnUiThread(() -> pcListLayout.setVisibility(View.GONE));
-                }
-            } else {
-                // Hide the unpaired layout if PC is paired.
-                if (unpairedLayout.getVisibility() == View.VISIBLE) {
-                    runOnUiThread(() -> unpairedLayout.setVisibility(View.GONE));
-                }
-                // Show the PC List layout if PC is paired.
-                if (pcListLayout.getVisibility() == View.GONE) {
-                    runOnUiThread(() -> pcListLayout.setVisibility(View.VISIBLE));
-                }
-            }
-        }
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(ADD_TO_PC_LIST);
+        filter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED);
+        filter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED);
+        getApplicationContext().registerReceiver(mainActivityReceiver, filter);
     }
 
-    @Override
-    protected void onStop() {
-        // If  the activity is, stopped interrupt pcRecViewUpdateThread.
-        if (pcRecViewUpdateThread != null) {
-            pcRecViewUpdateThread.interrupt();
+    private void addToPcRecViewAdapter(String pcAddress) {
+        mListedPCS.add(Utils.getPairedPC(pcAddress));
+        mPCRecViewAdapter.notifyDataSetChanged();
+        mUnpairedLayout.setVisibility(View.GONE);
+        mPCListLayout.setVisibility(View.VISIBLE);
+    }
+
+    private void removeFromPcRecViewAdapter(BluetoothDevice bluetoothDevice) {
+        int position = 0;
+        for (PairedPC pairedPC : mListedPCS) {
+            if (pairedPC.getAddress().equals(bluetoothDevice.getAddress())) {
+                mListedPCS.remove(pairedPC);
+                mPCRecViewAdapter.notifyItemRemoved(position);
+                break;
+            } else {
+                position += 1;
+            }
         }
-        super.onStop();
+
+        // If there are no PC's paired, hide the pc list and show the unpaired layout.
+        if (mListedPCS.size() == 0) {
+            mUnpairedLayout.setVisibility(View.VISIBLE);
+            mPCListLayout.setVisibility(View.GONE);
+        }
     }
 
     @Override
     public void onBackPressed() {
         // If the back button is pressed, close the drawer, but don't navigate
         // the user to StartupActivity.
-        menuDrawer.closeDrawer(GravityCompat.START);
-    }
-
-    @Override
-    protected void onDestroy() {
-        // If  the activity is  destroyed, interrupt pcRecViewUpdateThread.
-        if (pcRecViewUpdateThread != null) {
-            pcRecViewUpdateThread.interrupt();
-        }
-        super.onDestroy();
-    }
-
-    @Override
-    protected void onResume() {
-        // Upon resume, try to restart pcRecViewUpdateThread.
-        if (pcRecViewUpdateThread != null) {
-            if (!pcRecViewUpdateThread.isAlive()) {
-                pcRecViewUpdateThread = new PCRecViewUpdateThread(
-                        this, pcRecViewLayoutManager);
-                pcRecViewUpdateThread.start();
-            }
-        }
-        super.onResume();
-    }
-
-    @Override
-    protected void onRestart() {
-        // Upon resume, try to restart pcRecViewUpdateThread.
-        if (pcRecViewUpdateThread != null) {
-            if (!pcRecViewUpdateThread.isAlive()) {
-                pcRecViewUpdateThread = new PCRecViewUpdateThread(
-                        this, pcRecViewLayoutManager);
-                pcRecViewUpdateThread.start();
-            }
-        }
-        super.onRestart();
+        mMenuDrawer.closeDrawer(GravityCompat.START);
     }
 }
