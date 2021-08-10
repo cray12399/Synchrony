@@ -4,8 +4,6 @@ import bluetooth
 import pydbus
 import os
 
-# TODO: Create connection directly using QR code with UUID.
-
 
 def init_directory():
     """Initializes the program's main directory with key folders."""
