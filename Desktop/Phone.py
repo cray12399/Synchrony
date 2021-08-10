@@ -1,3 +1,4 @@
+import syncer
 import utils
 import os
 import pyclip
@@ -22,10 +23,13 @@ class Phone:
         self.__sync_thread.do_run = True
         self.__sync_thread.start()
 
+        self.__photo_sync_threads = {}
+        self.__contact_photo_buffer = {}
+
     def do_sync(self):
         while True:
             bluetooth_socket = self.try_connect()
-            while getattr(threading.currentThread(), "do_run", True):
+            while getattr(threading.currentThread(), 'do_run', True):
                 if bluetooth_socket is not None:
                     self.handle_commands(bluetooth_socket)
                     bluetooth_socket = self.check_socket_timing(bluetooth_socket)
@@ -42,7 +46,7 @@ class Phone:
 
         try:
             socket.connect((host, utils.SERVER_PORT))
-            socket.setblocking(0)
+            socket.settimeout(10)
             self.__connection_time = datetime.now()
             print("Connected to socket!")
         except bluetooth.btcommon.BluetoothError as e:
@@ -51,24 +55,58 @@ class Phone:
 
         return socket
 
-    def handle_commands(self, socket):
-        server_command = ""
+    def handle_commands(self, bluetooth_socket):
+        server_commands = []
         try:
-            server_command = socket.recv(1024).decode('utf-8')
+            server_commands = bluetooth_socket.recv(1024).decode('utf-8').split(";")
         except bluetooth.btcommon.BluetoothError:
             pass
 
-        if server_command == "server_heartbeat":
-            print(server_command)
-            socket.send("client_heartbeat")
-        elif "incoming_clipboard:" in server_command:
-            pyclip.copy(server_command.replace("incoming_clipboard: ", ""))
-        elif "incoming_contact:" in server_command:
-            print(server_command)
-            socket.send("sync_done")
+        for server_command in server_commands:
+            if server_command == "server_heartbeat":
+                bluetooth_socket.send("client_heartbeat;")
+            if server_command == "check_contacts_info_sync":
+                threading.Thread(target=syncer.Contacts.check_contacts_info_sync,
+                                 args=(self.__directory, bluetooth_socket)).start()
+            if server_command == "check_contacts_photos_sync":
+                threading.Thread(target=syncer.Contacts.check_contacts_photos_sync,
+                                 args=(self.__directory, bluetooth_socket)).start()
+            elif "incoming_clipboard:" in server_command:
+                pyclip.copy(server_command.split(": ")[1])
+            elif "incoming_contact:" in server_command:
+                contact = server_command.split(": ")[1]
+                threading.Thread(target=syncer.Contacts.write_contact_to_database,
+                                 args=(self.__directory, contact)).start()
+            elif "incoming_contact_photo_part:" in server_command:
+                self.handle_incoming_photo_part_command(server_command)
+            elif "delete_contact:" in server_command:
+                contact_id = int(server_command.replace("delete_contact: ", ""))
+                threading.Thread(target=syncer.Contacts.remove_contact_from_database,
+                                 args=(self.__directory, contact_id)).start()
 
-        if server_command != "":
-            self.__last_heartbeat = datetime.now()
+            if server_command != "":
+                self.__last_heartbeat = datetime.now()
+
+    def handle_incoming_photo_part_command(self, server_command):
+        extra_part = server_command.split(": ")[1]
+        contact_id = extra_part.split(' | ')[0]
+        info_part = extra_part.split(' | ')[1]
+
+        if 'START' in info_part:
+            if contact_id not in self.__contact_photo_buffer.keys():
+                self.__contact_photo_buffer[contact_id] = {}
+                self.__contact_photo_buffer[contact_id]['base64'] = []
+                self.__contact_photo_buffer[contact_id]['contact_id'] = contact_id
+                self.__contact_photo_buffer[contact_id]['hash'] = int(info_part.replace("START ", ""))
+        elif info_part != 'END':
+            self.__contact_photo_buffer[contact_id]['base64'].append(info_part)
+        else:
+            photo_64_bytes = bytes(''.join(self.__contact_photo_buffer[contact_id]['base64']), 'utf-8')
+            self.__contact_photo_buffer[contact_id]['base64'] = photo_64_bytes
+
+            threading.Thread(target=syncer.Contacts.write_contact_photo_to_database,
+                             args=(self.__directory, self.__contact_photo_buffer[contact_id])).start()
+            self.__contact_photo_buffer.pop(contact_id)
 
     def sync_thread_alive(self):
         return self.__sync_thread.isAlive()
@@ -102,11 +140,6 @@ def initialize_directory(name, address):
 
     if not os.path.isfile(f'{phone_directory}/config.ini'):
         create_phone_ini(phone_directory)
-
-    sub_dirs = ['Messages', 'Contacts']
-    for sub_dir in sub_dirs:
-        if not os.path.isdir(f'{phone_directory}/{sub_dir}'):
-            os.mkdir(f'{phone_directory}/{sub_dir}')
 
     return phone_directory
 

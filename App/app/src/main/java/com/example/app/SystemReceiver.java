@@ -20,7 +20,7 @@ public class SystemReceiver extends BroadcastReceiver {
 
                 Log.d(TAG, "onReceive: Starting BluetoothSyncThread in foreground...");
                 // If the device is booted, start the BluetoothSyncService foreground intent.
-                Intent syncServiceIntent = new Intent(context, BluetoothSyncService.class);
+                Intent syncServiceIntent = new Intent(context, BluetoothConnectService.class);
                 context.startForegroundService(syncServiceIntent);
                 break;
         }

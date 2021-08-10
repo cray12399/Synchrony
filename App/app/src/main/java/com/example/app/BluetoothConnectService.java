@@ -1,5 +1,7 @@
 package com.example.app;
 
+import static com.example.app.App.connectedDevicesChannelID;
+
 import android.app.Service;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
@@ -15,23 +17,20 @@ import android.util.Log;
 
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
-import androidx.core.app.NotificationManagerCompat;
 
 import java.io.IOException;
 import java.util.Objects;
 
-import static com.example.app.App.connectedDevicesChannelID;
-
 /**
- * Service class manages all of the background syncing activity. It manages the
- * connection threads for Paired PC's
+ * Service class manages all of the background connection activity. Assigns
+ * BluetoothConnectionThreads for Paired PC's
  */
-public class BluetoothSyncService extends Service {
+public class BluetoothConnectService extends Service {
     // Logging tag variables
-    private static final String TAG = "BluetoothSyncService";
+    private static final String TAG = "BluetoothConnectService";
 
     // Receiver variable
-    private BroadcastReceiver mBluetoothSyncReceiver;
+    private BroadcastReceiver mBluetoothConnectReceiver;
 
     // Main thread for the service.
     private PCListenerThread mPCListenerThread;
@@ -44,7 +43,7 @@ public class BluetoothSyncService extends Service {
                 new NotificationCompat.Builder(this,
                         connectedDevicesChannelID)
                         .setSmallIcon(R.drawable.ic_placeholder_logo)
-                        .setContentTitle("Sync Service Background")
+                        .setContentTitle("Connect Service Background")
                         .setGroup(CONNECTED_PC_GROUP)
                         .setGroupSummary(true)
                         .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -52,7 +51,7 @@ public class BluetoothSyncService extends Service {
         int summaryNotificationID = 69;
 
         startForeground(summaryNotificationID, summaryNotificationBuilder.build());
-        Log.d(TAG, "onStartCommand: BluetoothSyncService started in the foreground!");
+        Log.d(TAG, "onStartCommand: BluetoothConnectService started in the foreground!");
 
         searchForCompatibleDevices();
 
@@ -84,27 +83,30 @@ public class BluetoothSyncService extends Service {
             if (Utils.isConnected(bluetoothDevice.getAddress()) &&
                     Utils.inPairedPCS(bluetoothDevice.getAddress())) {
                 // Add it to the MainActivity
-                MainActivity.addToMainActivity(getApplicationContext(), bluetoothDevice);
+                MainActivity.addToMainActivity(this, bluetoothDevice);
 
-                // If the paired PC is set to sync automatically, automatically start syncing.
+                // If the paired PC is set to connect automatically, automatically start connecting.
                 if (Objects.requireNonNull(
-                        Utils.getPairedPC(bluetoothDevice.getAddress())).isSyncingAutomatically()) {
+                        Utils.getPairedPC(bluetoothDevice.getAddress()))
+                        .isConnectingAutomatically()) {
                     Objects.requireNonNull(Utils.getPairedPC(bluetoothDevice.getAddress()))
-                            .setSyncing(true);
+                            .setConnecting(true);
                     Log.d(TAG, String.format("searchForCompatibleDevices: " +
-                            "Automatically syncing device: %s!", deviceTag));
+                            "Automatically connecting device: %s!", deviceTag));
 
-                    // Notify the MainActivity that it is syncing.
-                    Utils.notifySyncChanged(getApplicationContext(), bluetoothDevice.getAddress());
+                    // Notify the MainActivity that it is connecting.
+                    Utils.notifyConnectChange(getApplicationContext(),
+                            bluetoothDevice.getAddress());
                     Log.d(TAG, String.format("searchForCompatibleDevices: " +
-                            "Notified main activity of syncing for device: %s!", deviceTag));
+                                    "Notified main activity of connecting status for device: %s!",
+                            deviceTag));
                 }
             }
         }
     }
 
     private void registerReceiver() {
-        mBluetoothSyncReceiver = new BroadcastReceiver() {
+        mBluetoothConnectReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
                 switch (intent.getAction()) {
@@ -123,101 +125,135 @@ public class BluetoothSyncService extends Service {
                                     bluetoothDevice);
                         }
 
-                        // If the device is set to sync automatically, then sync it automatically.
+                        // If the PC is set to connect automatically, then connect it automatically.
                         if (Objects.requireNonNull(Utils.getPairedPC(bluetoothDevice.getAddress()))
-                                .isSyncingAutomatically()) {
+                                .isConnectingAutomatically()) {
                             Objects.requireNonNull(Utils.getPairedPC(bluetoothDevice.getAddress()))
-                                    .setSyncing(true);
+                                    .setConnecting(true);
 
-                            Utils.notifySyncChanged(getApplicationContext(),
+                            Utils.notifyConnectChange(getApplicationContext(),
                                     bluetoothDevice.getAddress());
                         }
                         break;
                     }
 
+                    // If a PC is disconnected, stop connection.
                     case BluetoothDevice.ACTION_ACL_DISCONNECTED: {
                         BluetoothDevice bluetoothDevice = intent
                                 .getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-                        stopSyncing(bluetoothDevice.getAddress());
+                        String deviceAddress = bluetoothDevice.getAddress();
+                        String deviceName = bluetoothDevice.getName();
+                        String deviceTag = String.format("%s (%s)", deviceName, deviceAddress);
 
-                        Utils.notifySyncChanged(getApplicationContext(),
+                        Log.d(TAG, String.format("onReceive: " +
+                                        "Device disconnected! Stopping connection for device: %s!",
+                                deviceTag));
+
+                        stopConnection(bluetoothDevice);
+
+                        Utils.notifyConnectChange(getApplicationContext(),
                                 bluetoothDevice.getAddress());
                         break;
                     }
 
-                    case Utils.SYNC_CHANGED_ACTION: {
+                    // If a PC has been marked as no longer connecting, stop connection.
+                    case Utils.CONNECT_CHANGED_ACTION: {
                         String pcAddress = intent.getStringExtra(Utils.RECIPIENT_ADDRESS_KEY);
-                        if (Objects.requireNonNull(Utils.getPairedPC(pcAddress)).isSyncing()) {
-                            if (Utils.inPairedPCS(pcAddress)) {
-//                                startSyncing(context, pcAddress);
+                        if (!Objects.requireNonNull(Utils.getPairedPC(pcAddress)).isConnecting()) {
+                            BluetoothAdapter bluetoothAdapter = BluetoothAdapter
+                                    .getDefaultAdapter();
+                            for (BluetoothDevice bluetoothDevice : bluetoothAdapter
+                                    .getBondedDevices()) {
+                                if (bluetoothDevice.getAddress().equals(pcAddress)) {
+                                    stopConnection(bluetoothDevice);
+                                    break;
+                                }
                             }
-                        } else {
-                            stopSyncing(pcAddress);
                         }
                         break;
                     }
 
+                    // If bluetooth is disabled, stop all connection threads.
                     case BluetoothAdapter.ACTION_STATE_CHANGED:
-                        int extraState = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE,
-                                -1);
+                        Log.d(TAG, "onReceive: " +
+                                "Bluetooth disabled! Stopping connection threads!");
+
+                        int extraState = intent.getIntExtra(
+                                BluetoothAdapter.EXTRA_STATE, -1);
                         if (extraState == BluetoothAdapter.STATE_OFF) {
                             for (BluetoothConnectionThread bluetoothConnectionThread :
                                     Utils.getCurrentlyRunningThreads()) {
                                 bluetoothConnectionThread.interrupt();
                             }
                         }
+                        break;
                 }
             }
         };
 
         IntentFilter filter = new IntentFilter();
         filter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED);
-        filter.addAction(Utils.SYNC_CHANGED_ACTION);
+        filter.addAction(Utils.CONNECT_CHANGED_ACTION);
         filter.addAction(BluetoothDevice.ACTION_ACL_CONNECTED);
         filter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED);
-        getApplicationContext().registerReceiver(mBluetoothSyncReceiver, filter);
+        getApplicationContext().registerReceiver(mBluetoothConnectReceiver, filter);
     }
 
-    /** Interrupts all associated BluetoothConnectionThreads for device and
-     *  stops background syncing. */
-    private void stopSyncing(String pcAddress) {
+    /**
+     * Interrupts all associated BluetoothConnectionThreads for device and
+     * stops background connections.
+     */
+    private void stopConnection(BluetoothDevice bluetoothDevice) {
+        String deviceAddress = bluetoothDevice.getAddress();
+        String deviceName = bluetoothDevice.getName();
+
         for (BluetoothConnectionThread bluetoothConnectionThread :
                 Utils.getCurrentlyRunningThreads()) {
-            if (bluetoothConnectionThread.getDeviceAddress()
-                    .equals(pcAddress)) {
+            // If thread's associated device address matches PC address, interrupt it.
+            if (bluetoothConnectionThread.getDeviceAddress().equals(deviceAddress)) {
                 bluetoothConnectionThread.interrupt();
-                NotificationManagerCompat notificationManager =
-                        NotificationManagerCompat.from(getApplicationContext());
-                notificationManager.cancel(pcAddress,
-                        bluetoothConnectionThread.getNotificationID());
-
-                Objects.requireNonNull(Utils.getPairedPC(pcAddress)).setSyncing(false);
             }
+
+            // Mark PC as no longer connecting.
+            Objects.requireNonNull(Utils.getPairedPC(deviceAddress)).setConnecting(false);
+
+            String deviceTag = String.format("%s (%s)", deviceName, deviceAddress);
+            Log.d(TAG, String.format("stopConnection: " +
+                    "Connection stopped for device: %s!", deviceTag));
         }
     }
 
-    /** Creates a new BluetoothConnectionThread for a device and starts syncing in the background */
-    private void startSyncing(Context context, String pcAddress, BluetoothSocket bluetoothSocket) {
-        // Just in case there are any currently running threads for the device, interrupt them.
+    /**
+     * Creates a new BluetoothConnectionThread for a device and starts connection in the background
+     */
+    private void startConnection(Context context, BluetoothSocket bluetoothSocket) {
+        String connectedSocketAddress = bluetoothSocket.getRemoteDevice().getAddress();
+        String connectedSocketName = bluetoothSocket.getRemoteDevice().getName();
+
+        // Just in case there are any currently running threads for the PC, interrupt them.
         for (BluetoothConnectionThread bluetoothConnectionThread :
                 Utils.getCurrentlyRunningThreads()) {
             if (bluetoothConnectionThread.getDeviceAddress()
-                    .equals(pcAddress)) {
+                    .equals(connectedSocketAddress)) {
                 bluetoothConnectionThread.interrupt();
             }
         }
 
-        // Create a bluetoothConnectionThread for the device.
+        // Create a bluetoothConnectionThread for the PC.
         for (BluetoothDevice bluetoothDevice :
                 BluetoothAdapter.getDefaultAdapter().getBondedDevices()) {
-            if (bluetoothDevice.getAddress().equals(pcAddress)) {
+            if (bluetoothDevice.getAddress().equals(connectedSocketAddress)) {
                 Utils.addToCurrentlyRunningThreads(
                         new BluetoothConnectionThread(context, bluetoothDevice, bluetoothSocket));
                 break;
             }
         }
 
-        Objects.requireNonNull(Utils.getPairedPC(pcAddress)).setSyncing(true);
+        // Mark the PC as connecting.
+        Objects.requireNonNull(Utils.getPairedPC(connectedSocketAddress)).setConnecting(true);
+
+        String deviceTag = String.format("%s (%s)", connectedSocketName, connectedSocketAddress);
+        Log.d(TAG, String.format("startConnection: Connection started for device: %s!", deviceTag));
     }
 
     @Override
@@ -225,7 +261,7 @@ public class BluetoothSyncService extends Service {
         // If this service is destroyed, cancel all the current BluetoothConnectionThreads
         // and stop the foreground service.
         Log.d(TAG, "onDestroy: " +
-                "BluetoothSyncService destroyed! Stopping BluetoothConnected threads.");
+                "BluetoothConnectService destroyed! Stopping BluetoothConnected threads.");
         for (BluetoothConnectionThread bluetoothConnectionThread :
                 Utils.getCurrentlyRunningThreads()) {
             bluetoothConnectionThread.interrupt();
@@ -233,7 +269,7 @@ public class BluetoothSyncService extends Service {
 
         Utils.setForegroundRunning(false);
         mPCListenerThread.interrupt();
-        unregisterReceiver(mBluetoothSyncReceiver);
+        unregisterReceiver(mBluetoothConnectReceiver);
         stopForeground(true);
         stopSelf();
     }
@@ -262,27 +298,36 @@ public class BluetoothSyncService extends Service {
                 try {
                     if (!interrupted() && mBluetoothServerSocket != null) {
                         if (BluetoothAdapter.getDefaultAdapter().isEnabled()) {
+                            Log.d(TAG, "run: Listening for devices...");
                             bluetoothSocket = mBluetoothServerSocket.accept();
                         }
                     }
                 } catch (IOException e) {
-                    // If statement so that the log is not constantly getting timeout exceptions.
-                    if (!e.toString().contains("Try again")) {
-
-                    }
+                    Log.e(TAG, "run: Error accepting device connection:", e);
                 }
 
                 if (bluetoothSocket != null) {
+                    Log.d(TAG, "run: " +
+                            "Established connection with a device!");
                     String connectedSocketAddress = bluetoothSocket.getRemoteDevice().getAddress();
+                    String connectedSocketName = bluetoothSocket.getRemoteDevice().getName();
+                    String deviceTag = String.format("%s (%s)", connectedSocketName,
+                            connectedSocketAddress);
+
+                    // Check if device is in pairedPCS and if it is connecting. If so, start the
+                    // connection for it.
                     boolean closeSocket = true;
                     for (PairedPC pairedPC : Utils.getPairedPCS()) {
                         if (pairedPC.getAddress().equals(connectedSocketAddress)) {
-                            if (pairedPC.isSyncing()) {
-                                startSyncing(mContext, pairedPC.getAddress(), bluetoothSocket);
+                            if (pairedPC.isConnecting()) {
+                                Log.d(TAG, String.format("run: " +
+                                        "Starting connection for device: %s...", deviceTag));
+                                startConnection(mContext, bluetoothSocket);
                                 closeSocket = false;
                             }
                         }
                     }
+                    // Close the socket if the device is not in paired PC's or is not connecting.
                     if (closeSocket) {
                         try {
                             bluetoothSocket.close();
@@ -299,10 +344,13 @@ public class BluetoothSyncService extends Service {
             try {
                 BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
 
+                Log.d(TAG, "getBluetoothServerSocket: " +
+                        "Creating bluetooth server socket for device connections.");
                 tmp = bluetoothAdapter.listenUsingRfcommWithServiceRecord(
                         mContext.getString(R.string.app_name), Utils.getUuid());
-                // Cancel discovery because it otherwise slows down the connection.
-                bluetoothAdapter.cancelDiscovery();
+                Log.d(TAG, "getBluetoothServerSocket: " +
+                        "Created bluetooth server socket for device connections!");
+
             } catch (IOException e) {
                 // Timeout in case of failure to create BluetoothServerSocket.
                 SystemClock.sleep(5000);

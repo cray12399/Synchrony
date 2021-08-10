@@ -33,10 +33,10 @@ public class PermissionsRecViewAdapter extends RecyclerView.Adapter<PermissionsR
 
     // Constructor variables.
     private final Context mContext;
-    public HashMap<String, Permission> mPermissionsNotGranted;
+    public HashMap<String, PermissionsActivity.Permission> mPermissionsNotGranted;
 
-    public PermissionsRecViewAdapter(Context CONTEXT,
-                                     HashMap<String, Permission> permissionsNotGranted) {
+    public PermissionsRecViewAdapter(Context CONTEXT, HashMap<String,
+            PermissionsActivity.Permission> permissionsNotGranted) {
         this.mContext = CONTEXT;
         this.mPermissionsNotGranted = permissionsNotGranted;
     }
@@ -53,7 +53,8 @@ public class PermissionsRecViewAdapter extends RecyclerView.Adapter<PermissionsR
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         // Get the indices of permissions not granted so that they can be accurately displayed.
         ArrayList<String> indices = new ArrayList<>(mPermissionsNotGranted.keySet());
-        for (Map.Entry<String, Permission> entry : mPermissionsNotGranted.entrySet()) {
+        for (Map.Entry<String, PermissionsActivity.Permission> entry :
+                mPermissionsNotGranted.entrySet()) {
             if (indices.indexOf(entry.getKey()) == position) {
                 holder.permissionNameTxt.setText(entry.getKey());
 
@@ -93,7 +94,8 @@ public class PermissionsRecViewAdapter extends RecyclerView.Adapter<PermissionsR
         return mPermissionsNotGranted.size();
     }
 
-    private void getPermission(View itemView, Map.Entry<String, Permission> entry) {
+    private void getPermission(View itemView, Map.Entry<String,
+            PermissionsActivity.Permission> entry) {
         // Separated entry into separate variables for code readability
         String neededPermission = entry.getValue().getManifestPermission();
         String permissionDescription = entry.getValue().getDescription();

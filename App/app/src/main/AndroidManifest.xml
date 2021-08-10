@@ -51,7 +51,7 @@
             </intent-filter>
         </activity>
 
-        <service android:name=".BluetoothSyncService" />
+        <service android:name=".BluetoothConnectService" />
     </application>
 
 </manifest>

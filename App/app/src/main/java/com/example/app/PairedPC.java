@@ -8,27 +8,25 @@ import android.bluetooth.BluetoothDevice;
  * data and configuration.
  */
 public class PairedPC {
-    // Constructor variables
     private final String mPCName;
     private final String mPCAddress;
     private final String mPCType;
 
-    // Sync variables. Used track syncing status of PC.
-    private transient boolean mIsSyncing;
-    private boolean mSyncingAutomatically = true;
+    private transient boolean mConnecting;
+    private boolean connectAutomatically = true;
+
     private long mLastSync;
 
     // Bluetooth connection variables.
     private transient boolean mSocketConnected = false;
-    private transient Thread mBluetoothConnectionThread;
 
-    public PairedPC(String pcName, String pcAddress, BluetoothDevice device) {
+    public PairedPC(String pcName, String pcAddress, BluetoothDevice bluetoothDevice) {
         // PCName and PCAddress are assigned this way because they become null upon
         // reboot of the app when assigned directly from the device.
         this.mPCName = pcName;
         this.mPCAddress = pcAddress;
 
-        int deviceClass = device.getBluetoothClass().getDeviceClass();
+        int deviceClass = bluetoothDevice.getBluetoothClass().getDeviceClass();
         if (deviceClass == BluetoothClass.Device.COMPUTER_LAPTOP) {
             mPCType = "Laptop";
         } else if (deviceClass == BluetoothClass.Device.COMPUTER_DESKTOP) {
@@ -50,20 +48,20 @@ public class PairedPC {
         return mPCType;
     }
 
-    public boolean isSyncing() {
-        return mIsSyncing;
+    public boolean isConnecting() {
+        return mConnecting;
     }
 
-    public void setSyncing(boolean syncing) {
-        mIsSyncing = syncing;
+    public void setConnecting(boolean connecting) {
+        mConnecting = connecting;
     }
 
-    public boolean isSyncingAutomatically() {
-        return mSyncingAutomatically;
+    public boolean isConnectingAutomatically() {
+        return connectAutomatically;
     }
 
-    public void setSyncingAutomatically(boolean mSyncingAutomatically) {
-        this.mSyncingAutomatically = mSyncingAutomatically;
+    public void setConnectionAutomatically(boolean connectAutomatically) {
+        this.connectAutomatically = connectAutomatically;
     }
 
     public boolean isSocketConnected() {

@@ -44,25 +44,24 @@ public class MainActivity extends AppCompatActivity {
     private RelativeLayout mPCListLayout;
     private RelativeLayout mUnpairedLayout;
     private PCRecViewAdapter mPCRecViewAdapter;
-    private Snackbar mBTDisconnectedSnackbar;
+    private Snackbar mBTDisconnectedSnackBar;
 
     /**
      * Static method that allows other classes tell the MainActivity to add a PC to pcRecView.
      */
-    public static void addToMainActivity(Context applicationContext,
+    public static void addToMainActivity(Context context,
                                          BluetoothDevice bluetoothDevice) {
-        Intent setPCSyncingIntent = new Intent();
-        setPCSyncingIntent.setAction(MainActivity.ADD_TO_PC_LIST);
-        setPCSyncingIntent.putExtra(MainActivity.ADDED_PC_KEY,
+        Intent addToMainActivityIntent = new Intent();
+        addToMainActivityIntent.setAction(MainActivity.ADD_TO_PC_LIST);
+        addToMainActivityIntent.putExtra(MainActivity.ADDED_PC_KEY,
                 bluetoothDevice.getAddress());
-        applicationContext.sendBroadcast(setPCSyncingIntent);
+        context.getApplicationContext().sendBroadcast(addToMainActivityIntent);
     }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-
 
         initializeUI();
         initializePCListing();
@@ -74,6 +73,7 @@ public class MainActivity extends AppCompatActivity {
      */
     private void initializeUI() {
         // Set up the hamburger menu button and set it to rotate when pressed.
+        mMenuDrawer = findViewById(R.id.drawerLayout);
         ImageButton menuOpenBtn = findViewById(R.id.menuOpenBtn);
         menuOpenBtn.setOnClickListener(v -> {
             Animation rotate = AnimationUtils.loadAnimation(MainActivity.this,
@@ -82,7 +82,6 @@ public class MainActivity extends AppCompatActivity {
 
             // Used a handler to delay the opening of the drawer so that the animation can be shown.
             Handler handler = new Handler();
-            mMenuDrawer = findViewById(R.id.drawerLayout);
             handler.postDelayed(() -> mMenuDrawer.openDrawer(GravityCompat.START), 100);
             Log.d(TAG, "onCreate: Menu drawer opened!");
         });
@@ -109,10 +108,10 @@ public class MainActivity extends AppCompatActivity {
         mUnpairedLayout = findViewById(R.id.unpairedLayout);
 
         // btDisconnectSnackbar used to prompt the user to re-enable bluetooth.
-        mBTDisconnectedSnackbar = Snackbar.make(mUnpairedLayout,
+        mBTDisconnectedSnackBar = Snackbar.make(mUnpairedLayout,
                 "Bluetooth not enabled!",
                 Snackbar.LENGTH_INDEFINITE);
-        mBTDisconnectedSnackbar.setAction("Enable", v -> {
+        mBTDisconnectedSnackBar.setAction("Enable", v -> {
             BluetoothAdapter.getDefaultAdapter().enable();
             Log.d(TAG, "onCreate: Bluetooth enabled by user!");
         });
@@ -121,14 +120,15 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * Tries to start the BluetoothSyncService and initializes listing of PC's in pcRecView
+     * Tries to start the BluetoothConnectService and initializes listing of PC's in pcRecView
      */
     private void initializePCListing() {
-        // Start the main service, BluetoothSyncService, if it isn't running.
+        // Start the main service, BluetoothConnectService, if it isn't running.
         if (!Utils.isForegroundRunning()) {
-            Intent syncServiceIntent = new Intent(this, BluetoothSyncService.class);
-            startForegroundService(syncServiceIntent);
-            Log.d(TAG, "initializePCListing: BluetoothSyncService started in foreground!");
+            Intent connectServiceIntent =
+                    new Intent(this, BluetoothConnectService.class);
+            startForegroundService(connectServiceIntent);
+            Log.d(TAG, "initializePCListing: BluetoothConnectService started in foreground!");
             // If it is running, try to populate the pcRecViewAdapter with connected Paired PC's.
         } else {
             for (PairedPC pairedPC : Utils.getPairedPCS()) {
@@ -161,7 +161,7 @@ public class MainActivity extends AppCompatActivity {
                 mPCListLayout.setVisibility(View.GONE);
                 mUnpairedLayout.setVisibility(View.VISIBLE);
                 mPairBtn.setEnabled(false);
-                mBTDisconnectedSnackbar.show();
+                mBTDisconnectedSnackBar.show();
                 Log.d(TAG, "initializePCListing: " +
                         "Bluetooth not enabled! Prompting user to enable!");
                 // If it is enabled, begin listing all connected PC's
@@ -193,7 +193,7 @@ public class MainActivity extends AppCompatActivity {
                             // using pairBtn and dismiss btDisconnectedSnackbar
                             case BluetoothAdapter.STATE_ON:
                                 mPairBtn.setEnabled(true);
-                                mBTDisconnectedSnackbar.dismiss();
+                                mBTDisconnectedSnackBar.dismiss();
                                 break;
 
                             // If bluetooth is disabled, hide and clear pc list and disable
@@ -202,7 +202,7 @@ public class MainActivity extends AppCompatActivity {
                                 mUnpairedLayout.setVisibility(View.VISIBLE);
                                 mPCListLayout.setVisibility(View.GONE);
                                 mPairBtn.setEnabled(false);
-                                mBTDisconnectedSnackbar.show();
+                                mBTDisconnectedSnackBar.show();
                                 mListedPCS.clear();
                                 Log.d(TAG, "onReceive: " +
                                         "Bluetooth not enabled! Prompting user to enable!");

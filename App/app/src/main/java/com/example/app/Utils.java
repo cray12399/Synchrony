@@ -7,7 +7,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.util.Log;
-import android.util.Pair;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
@@ -15,6 +14,7 @@ import com.google.gson.reflect.TypeToken;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -25,7 +25,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  */
 public class Utils {
     // Action and Key variables.
-    public static final String SYNC_CHANGED_ACTION = "syncChangedAction";
+    public static final String CONNECT_CHANGED_ACTION = "connectChangedAction";
     public static final String RECIPIENT_ADDRESS_KEY = "recipientAddressKey";
     // Logging tag variables.
     private static final String TAG = "Utils";
@@ -107,7 +107,7 @@ public class Utils {
                 deviceClass == BluetoothClass.Device.COMPUTER_LAPTOP || deviceClass == 0) {
             sPairedPCS.add(new PairedPC(bluetoothDevice.getName(), bluetoothDevice.getAddress(),
                     bluetoothDevice));
-            savePairedPCSToSharePreferences();
+            savePairedPCSToSharedPreferences();
         }
     }
 
@@ -118,10 +118,10 @@ public class Utils {
                 break;
             }
         }
-        savePairedPCSToSharePreferences();
+        savePairedPCSToSharedPreferences();
     }
 
-    private static void savePairedPCSToSharePreferences() {
+    private static void savePairedPCSToSharedPreferences() {
         SharedPreferences.Editor prefsEditor = sSharedPreferences.edit();
         Gson gson = new Gson();
         String json = gson.toJson(sPairedPCS);
@@ -198,12 +198,19 @@ public class Utils {
     }
 
     /**
-     * Static method that allows other classes to notify the app of a device's syncing status.
+     * Static method that allows other classes to notify the app of a device's connect status.
      */
-    public static void notifySyncChanged(Context applicationContext, String pcAddress) {
-        Intent syncChangedIntent = new Intent();
-        syncChangedIntent.setAction(Utils.SYNC_CHANGED_ACTION);
-        syncChangedIntent.putExtra(Utils.RECIPIENT_ADDRESS_KEY, pcAddress);
-        applicationContext.sendBroadcast(syncChangedIntent);
+    public static void notifyConnectChange(Context applicationContext, String pcAddress) {
+        Intent connectChangedIntent = new Intent();
+        connectChangedIntent.setAction(Utils.CONNECT_CHANGED_ACTION);
+        connectChangedIntent.putExtra(Utils.RECIPIENT_ADDRESS_KEY, pcAddress);
+        applicationContext.sendBroadcast(connectChangedIntent);
+    }
+
+    public static void setPCConnectingAutomatically(String pcAddress,
+                                                    boolean connectingAutomatically) {
+        Objects.requireNonNull(
+                getPairedPC(pcAddress)).setConnectionAutomatically(connectingAutomatically);
+        savePairedPCSToSharedPreferences();
     }
 }

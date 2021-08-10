@@ -2,7 +2,6 @@ package com.example.app;
 
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
-import android.os.Build;
 import android.util.Log;
 
 /**
@@ -23,10 +22,8 @@ public class App extends android.app.Application {
         Utils.initValues(this);
 
         // Create notification channels
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            createConnectedPCNotificationChannel();
-            createDisconnectedPCNotificationChannel();
-        }
+        createConnectedPCNotificationChannel();
+        createDisconnectedPCNotificationChannel();
     }
 
     /**

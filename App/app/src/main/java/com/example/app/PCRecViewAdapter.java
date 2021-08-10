@@ -4,7 +4,6 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.os.SystemClock;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -66,13 +65,13 @@ public class PCRecViewAdapter extends RecyclerView.Adapter<PCRecViewAdapter.View
             }
         });
 
-        // Set the pcActiveSwitch to toggle the Paired PC's sync activity.
-        holder.pcSyncingSwitch.setChecked(mListedPCS.get(position).isSyncing());
-        holder.pcSyncingSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            Utils.notifySyncChanged(mContext.getApplicationContext(), listedPC.getAddress());
+        // Set the pcActiveSwitch to toggle the Paired PC's connect status.
+        holder.pcConnectingSwitch.setChecked(mListedPCS.get(position).isConnecting());
+        holder.pcConnectingSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            Utils.notifyConnectChange(mContext.getApplicationContext(), listedPC.getAddress());
 
             Objects.requireNonNull(
-                    Utils.getPairedPC(listedPC.getAddress())).setSyncing(isChecked);
+                    Utils.getPairedPC(listedPC.getAddress())).setConnecting(isChecked);
         });
 
         // Set the card view to navigate the user to the PCDetailActivity when clicked.
@@ -83,22 +82,22 @@ public class PCRecViewAdapter extends RecyclerView.Adapter<PCRecViewAdapter.View
             mContext.startActivity(showPCDetailsIntent);
         });
 
-        holder.syncReceiver = new BroadcastReceiver() {
+        holder.connectReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
-                if (intent.getAction().equals(Utils.SYNC_CHANGED_ACTION)) {
+                if (intent.getAction().equals(Utils.CONNECT_CHANGED_ACTION)) {
                     if (intent.getStringExtra(Utils.RECIPIENT_ADDRESS_KEY)
                             .equals(listedPC.getAddress())) {
-                        holder.pcSyncingSwitch.setChecked(Objects.requireNonNull(
-                                Utils.getPairedPC(listedPC.getAddress())).isSyncing());
+                        holder.pcConnectingSwitch.setChecked(Objects.requireNonNull(
+                                Utils.getPairedPC(listedPC.getAddress())).isConnecting());
                     }
                 }
             }
         };
 
         IntentFilter filter = new IntentFilter();
-        filter.addAction(Utils.SYNC_CHANGED_ACTION);
-        mContext.getApplicationContext().registerReceiver(holder.syncReceiver, filter);
+        filter.addAction(Utils.CONNECT_CHANGED_ACTION);
+        mContext.getApplicationContext().registerReceiver(holder.connectReceiver, filter);
     }
 
     @Override
@@ -114,9 +113,9 @@ public class PCRecViewAdapter extends RecyclerView.Adapter<PCRecViewAdapter.View
         TextView pcNameText;
         TextView pcAddressText;
         TextView pcTypeText;
-        SwitchCompat pcSyncingSwitch;
+        SwitchCompat pcConnectingSwitch;
         boolean expanded = false;
-        BroadcastReceiver syncReceiver;
+        BroadcastReceiver connectReceiver;
 
         public ViewHolder(@NonNull View itemView) {
             super(itemView);
@@ -127,7 +126,7 @@ public class PCRecViewAdapter extends RecyclerView.Adapter<PCRecViewAdapter.View
             pcNameText = itemView.findViewById(R.id.pcNameText);
             pcAddressText = itemView.findViewById(R.id.pcAddressText);
             pcTypeText = itemView.findViewById(R.id.pcTypeText);
-            pcSyncingSwitch = itemView.findViewById(R.id.pcSyncingSwitch);
+            pcConnectingSwitch = itemView.findViewById(R.id.pcConnectingSwitch);
         }
     }
 }
