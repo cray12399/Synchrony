@@ -14,34 +14,49 @@ import com.google.gson.reflect.TypeToken;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * This is the main utility class of the app. Its main purpose is to manage the app's
- * Shared Preferences, manage the app's PairedPC's, and provide important app-wide functions.
+ * Main utility class of the app. Manages persistent data and holds general functions
+ * and constants that are used app-wide.
  */
 public class Utils {
     // Action and Key variables.
     public static final String CONNECT_CHANGED_ACTION = "connectChangedAction";
     public static final String RECIPIENT_ADDRESS_KEY = "recipientAddressKey";
+
     // Logging tag variables.
     private static final String TAG = "Utils";
     private static final String sPairedPCsKey = "pairedPcs";
     private static final String sFirstRunKey = "firstRun";
     private static final String sUUIDKey = "uuid";
+
     // Data variables.
     private static final ArrayList<BluetoothConnectionThread> currentlyRunningThreads =
             new ArrayList<>();
+
     // Shared preferences variable.
     private static SharedPreferences sSharedPreferences;
+
+    // Contains a list of all previously and currently connected PCs.
     private static CopyOnWriteArrayList<PairedPC> sPairedPCS;
+
+    // The app's UUID.
     private static String sUUID;
+
+    // Keeps track of whether the Bluetooth Connect Service is running in the foreground or not.
     private static boolean sForegroundRunning = false;
 
-    // Initializes all the values and loads them into the Utils class.
+    public static final String COMMAND_DELIMITER = "``;";
+
+    /**
+     * Initializes all the values and loads them into the Utils class.
+     */
+
     public static void initValues(Context context) {
         sSharedPreferences = context.getSharedPreferences(context.getString(R.string.app_name),
                 Context.MODE_PRIVATE);
@@ -52,8 +67,8 @@ public class Utils {
         if (pairedPCSValue != null) {
             Gson gson = new Gson();
             sPairedPCS = gson.fromJson(pairedPCSValue,
-                    new TypeToken<CopyOnWriteArrayList<PairedPC>>() {
-                    }.getType());
+                    new TypeToken<CopyOnWriteArrayList<PairedPC>>() {}.getType());
+
             // If not, make a new Paired PC's list.
         } else {
             sPairedPCS = new CopyOnWriteArrayList<>();
@@ -133,7 +148,7 @@ public class Utils {
         return java.util.UUID.fromString(sUUID);
     }
 
-    // This method checks if bluetooth devices are actually connected or not.
+    /** Checks if bluetooth devices are actually connected or not. */
     public static boolean isConnected(String address) {
         Set<BluetoothDevice> pairedDevices = BluetoothAdapter.getDefaultAdapter()
                 .getBondedDevices();
@@ -200,7 +215,7 @@ public class Utils {
     /**
      * Static method that allows other classes to notify the app of a device's connect status.
      */
-    public static void notifyConnectChange(Context applicationContext, String pcAddress) {
+    public static void broadcastConnectChange(Context applicationContext, String pcAddress) {
         Intent connectChangedIntent = new Intent();
         connectChangedIntent.setAction(Utils.CONNECT_CHANGED_ACTION);
         connectChangedIntent.putExtra(Utils.RECIPIENT_ADDRESS_KEY, pcAddress);
@@ -211,6 +226,11 @@ public class Utils {
                                                     boolean connectingAutomatically) {
         Objects.requireNonNull(
                 getPairedPC(pcAddress)).setConnectionAutomatically(connectingAutomatically);
+        savePairedPCSToSharedPreferences();
+    }
+
+    public static void setPCLastSync(String address, Date lastSync) {
+        Objects.requireNonNull(getPairedPC(address)).setLastSync(lastSync);
         savePairedPCSToSharedPreferences();
     }
 }

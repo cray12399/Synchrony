@@ -31,7 +31,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="10dp"
-                android:text="Sync"
+                android:text="Connect"
                 android:textSize="20sp"
                 android:textStyle="bold" />
 
@@ -156,7 +156,7 @@
     </LinearLayout>
 
     <LinearLayout
-        android:layout_width="250dp"
+        android:layout_width="300dp"
         android:layout_height="wrap_content"
         android:layout_marginTop="50dp"
         android:gravity="center_horizontal"
@@ -179,7 +179,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="10dp"
-                android:text="Sync Automatically"
+                android:text="Connect Automatically"
                 android:textSize="20sp"
                 android:textStyle="bold" />
 

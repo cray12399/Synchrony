@@ -22,6 +22,8 @@ import com.google.gson.reflect.TypeToken;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Objects;
 
@@ -105,12 +107,14 @@ class BluetoothConnectionThread extends Thread {
     }
 
     /**
-     * Method used to send commands to the client. Static so that other functions can use it.
+     * Method used to send commands to the client. Static so that other classes can use it.
      */
-    public static void sendCommand(BluetoothSocket bluetoothSocket, byte[] command) {
+    public static void sendCommand(BluetoothSocket bluetoothSocket, String stringCommand) {
         BluetoothDevice device = bluetoothSocket.getRemoteDevice();
         final String DEVICE_TAG = String.format("%s (%s)", device.getName(), device.getAddress());
         try {
+            byte[] command = (stringCommand + Utils.COMMAND_DELIMITER).getBytes();
+
             Log.d(TAG, String.format("sendCommand: " +
                             "Sending command to client for device: %s: %s...", DEVICE_TAG,
                     new String(command)));
@@ -148,7 +152,7 @@ class BluetoothConnectionThread extends Thread {
                 Utils.getPairedPC(bluetoothDevice.getAddress())).isSocketConnected()) {
             Objects.requireNonNull(Utils.getPairedPC(bluetoothDevice.getAddress()))
                     .setSocketConnected(true);
-            notifySocketConnectionChange(context, bluetoothDevice);
+            broadcastSocketConnectionChange(context, bluetoothDevice);
         }
     }
 
@@ -167,28 +171,32 @@ class BluetoothConnectionThread extends Thread {
         context.getApplicationContext().sendBroadcast(doSyncIntent);
     }
 
-    private static void notifySocketConnectionChange(Context context,
-                                                     BluetoothDevice bluetoothDevice) {
+    private static void broadcastSocketConnectionChange(Context context,
+                                                        BluetoothDevice bluetoothDevice) {
         Intent socketConnectedIntent = new Intent();
         socketConnectedIntent.setAction(SOCKET_CONNECTION_CHANGE_ACTION);
         socketConnectedIntent.putExtra(Utils.RECIPIENT_ADDRESS_KEY, bluetoothDevice.getAddress());
         context.getApplicationContext().sendBroadcast(socketConnectedIntent);
     }
-
     @Override
     public void run() {
         // Since the socketConnected field is transient, the thread needs to
         // set it as false so it isn't null
         Objects.requireNonNull(Utils.getPairedPC(mDevice.getAddress())).setSocketConnected(true);
-        notifySocketConnectionChange(mContext, mDevice);
+        broadcastSocketConnectionChange(mContext, mDevice);
 
         mSocketConnectedTime = System.currentTimeMillis();
 
         // Create a connected notification, and begin managing the connection.
         createNotification();
 
-        while (!interrupted()) {
+        do {
             manageConnectedSocket();
+
+        } while (!interrupted());
+
+        if (mSyncer != null) {
+            mSyncer.interrupt();
         }
 
         closeBluetoothSocket();
@@ -208,14 +216,13 @@ class BluetoothConnectionThread extends Thread {
             @Override
             public void onReceive(Context context, Intent intent) {
                 String broadcastRecipient = intent.getStringExtra(Utils.RECIPIENT_ADDRESS_KEY);
-                System.out.println(broadcastRecipient);
                 if (broadcastRecipient.equals(mDevice.getAddress())) {
                     switch (intent.getAction()) {
                         // If the user sent their clipboard from the PCDetailActivity.
                         case SEND_CLIPBOARD_ACTION: {
                             String clipboard = intent.getStringExtra(CLIPBOARD_KEY);
                             sendCommand(mBluetoothSocket,
-                                    String.format("incoming_clipboard: %s;", clipboard).getBytes());
+                                    String.format("incoming_clipboard: %s", clipboard));
                             break;
                         }
 
@@ -234,7 +241,7 @@ class BluetoothConnectionThread extends Thread {
                                     mDevice.getAddress())).setConnecting(false);
 
                             // Broadcast connection change to MainActivity.
-                            Utils.notifyConnectChange(mContext.getApplicationContext(),
+                            Utils.broadcastConnectChange(mContext.getApplicationContext(),
                                     mDevice.getAddress());
                             break;
                         }
@@ -277,10 +284,9 @@ class BluetoothConnectionThread extends Thread {
                 Log.d(TAG, String.format("closeSockets: " +
                         "Closing bluetooth socket for device: %s...", mDeviceTag));
                 mBluetoothSocket.close();
-                interrupt();
                 Objects.requireNonNull(
                         Utils.getPairedPC(mDevice.getAddress())).setSocketConnected(false);
-                notifySocketConnectionChange(mContext, mDevice);
+                broadcastSocketConnectionChange(mContext, mDevice);
                 Log.d(TAG, String.format("closeSockets: " +
                         "Bluetooth socket closed for device: %s!", mDeviceTag));
             } catch (IOException e) {
@@ -291,8 +297,7 @@ class BluetoothConnectionThread extends Thread {
     }
 
     /**
-     * Creates the notification for the thread. Connected boolean changes the content
-     * of the notification to reflect the connection status.
+     * Create the notification for the thread.
      */
     private void createNotification() {
         // This intent is used to allow the user to set the PC as non-connecting
@@ -335,22 +340,43 @@ class BluetoothConnectionThread extends Thread {
         Log.d(TAG, String.format("handleCommand: " +
                 "Command obtained from client for device: %s: %s!", mDeviceTag, clientCommand));
 
-        if (clientCommand.contains("have_contacts:")) {
+        // If the client sends a list of its currently synced contacts, pass them to the syncer.
+        if (clientCommand.contains("have_contact_hashes:")) {
+            Log.d(TAG, String.format("handleCommand: Received contact hashes from device: %s!",
+                    mDeviceTag));
+
             if (mSyncer != null) {
                 Gson gson = new Gson();
                 String jsonString = clientCommand.split(": ")[1];
-                HashMap<Integer, Integer> clientContacts = gson.fromJson(jsonString,
-                        new TypeToken<HashMap<Integer, Integer>>() {
-                        }.getType());
-                mSyncer.setClientContacts(clientContacts);
+                HashMap<Long, Long> clientContacts = gson.fromJson(jsonString,
+                        new TypeToken<HashMap<Long, Long>>() {}.getType());
+                mSyncer.setClientContactHashes(clientContacts);
             }
-        } else if (clientCommand.contains("have_photos:")) {
-            Gson gson = new Gson();
-            String jsonString = clientCommand.split(": ")[1];
-            HashMap<Integer, Integer> clientPhotos = gson.fromJson(jsonString,
-                    new TypeToken<HashMap<Integer, Integer>>() {
-                    }.getType());
-            mSyncer.setClientContactsPhotos(clientPhotos);
+
+            // If the client sends a list of its currently synced photos, pass them to the syncer.
+        } else if (clientCommand.contains("have_contact_photo_hashes:")) {
+            Log.d(TAG, String.format("handleCommand: " +
+                            "Received contact photo hashes from device: %s!", mDeviceTag));
+
+            if (mSyncer != null) {
+                Gson gson = new Gson();
+                String jsonString = clientCommand.split(": ")[1];
+                HashMap<Long, Long> clientPhotos = gson.fromJson(jsonString,
+                        new TypeToken<HashMap<Long, Long>>() {}.getType());
+                mSyncer.setClientContactPhotoHashes(clientPhotos);
+            }
+
+        } else if (clientCommand.contains("have_messages:")) {
+            Log.d(TAG, String.format("handleCommand: " +
+                    "Received message ids from device: %s!", mDeviceTag));
+
+            if (mSyncer != null) {
+                Gson gson = new Gson();
+                String jsonString = clientCommand.split(": ")[1];
+                ArrayList<Long> clientMessageIDs = gson.fromJson(jsonString,
+                        new TypeToken<ArrayList<Long>>() {}.getType());
+                mSyncer.setClientMessageIDs(clientMessageIDs);
+            }
         }
     }
 
@@ -358,14 +384,14 @@ class BluetoothConnectionThread extends Thread {
         return mDevice.getAddress();
     }
 
-    /** Sends a heartbeat to the client to track connection status. */
+    /** Sends a heartbeat to the client at a defined interval to track connection status. */
     public void sendHeartbeat() {
         // Timing between heartbeats.
         final int SEND_HEARTBEAT_TIMING = 5000;
 
         if (mLastServerHeartBeat == -1 ||
                 System.currentTimeMillis() - mLastServerHeartBeat > SEND_HEARTBEAT_TIMING) {
-            sendCommand(mBluetoothSocket, "server_heartbeat;".getBytes());
+            sendCommand(mBluetoothSocket, "server_heartbeat");
 
             mLastServerHeartBeat = System.currentTimeMillis();
         }
@@ -378,9 +404,28 @@ class BluetoothConnectionThread extends Thread {
     private void manageConnectedSocket() {
         String incomingCommands = receiveCommand(mContext, mBluetoothSocket);
         if (incomingCommands != null) {
-            String[] clientCommands = incomingCommands.split(";");
+            String[] clientCommands = incomingCommands.split(Utils.COMMAND_DELIMITER);
             for (String clientCommand : clientCommands) {
-                handleCommand(clientCommand);
+
+                // If a command was successfully retrieved, handle it.
+                // Otherwise, assume the socket was closed stop the thread.
+                if (!clientCommand.equals("Receive Failure")) {
+                    handleCommand(clientCommand);
+                } else {
+                    interrupt();
+                }
+            }
+        }
+
+        // Check if a sync has not been done yet, or if the last sync time
+        // is beyond the sync interval. If either is true, sync data with device.
+        final long syncInterval = 1000 * 120;
+        Date lastSync = Objects.requireNonNull(
+                Utils.getPairedPC(mDevice.getAddress())).getLastSync();
+        if (lastSync == null || System.currentTimeMillis() - lastSync.getTime() > syncInterval) {
+            if (mSyncer == null || !mSyncer.isAlive()) {
+                mSyncer = new Syncer(mContext, mBluetoothSocket);
+                mSyncer.start();
             }
         }
 
@@ -398,6 +443,7 @@ class BluetoothConnectionThread extends Thread {
                     Log.d(TAG, "manageConnectedSocket: " +
                             "No response from client. Socket connection timeout.");
                 }
+
                 // If the client hasn't sent a heart beat, check the connection against the initial
                 // connection time. If it is greater than 10 seconds, assume the socket
                 // connection is closed.

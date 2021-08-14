@@ -1,22 +1,59 @@
+import utils
 from Phone import Phone
+import sys
 import time
 import bluetooth
 import pydbus
 import os
+import logging
+from datetime import datetime
+from configparser import ConfigParser
 
 
-def init_directory():
+def initialize_logging():
+    if not os.path.isdir("Logs/"):
+        os.mkdir("Logs/")
+
+    while len([file for file in os.listdir('Logs/')]) > 20:
+        os.remove(f"Logs/{[file for file in os.listdir('Logs/')][0]}")
+
+    file_handler = logging.FileHandler(filename=f"Logs/Log - ({datetime.now().strftime('%m.%d.%y-%H.%M.%S')})")
+    stream_handler = logging.StreamHandler(sys.stdout)
+    handlers = [file_handler, stream_handler]
+
+    logging.basicConfig(format=' %(name)s :: %(levelname)-8s :: %(message)s',
+                        level=logging.DEBUG,
+                        handlers=handlers)
+
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+
+    return logging.getLogger()
+
+
+def initialize_config(logger):
+    config = ConfigParser()
+
+    with open('main_config.ini', 'w') as config_file:
+        config.write(config_file)
+
+
+def initialize_directory(logger):
     """Initializes the program's main directory with key folders."""
 
-    if not os.path.isdir("Config/"):
-        os.mkdir("Config/")
+    logger.info("Initializing directories...")
 
     if not os.path.isdir("Phones/"):
         os.mkdir("Phones/")
+        logger.debug(f"Successfully created directory: {os.path.abspath}/Phones/!")
+
+    logger.info("Directory successfully initialized!")
 
 
-def handle_devices():
+def handle_devices(logger):
     """Tries to find connected devices that are compatible with the program."""
+
+    logger.info("Starting device handling process!")
 
     phone_connections = {}
 
@@ -34,9 +71,21 @@ def handle_devices():
 
             # If it is compatible and it is not being connected, connect it.
             if is_phone and device_address not in phone_connections.keys():
-                phone_connections[device_address] = Phone(device_name, device_address, service_matches)
+                phone_connections[device_address] = Phone(device_name, device_address, service_matches, logger)
 
-            time.sleep(.5)
+        # Check for devices that are no longer connected and stop their connection background services.
+        connections_to_remove = []
+        for device_address in phone_connections.keys():
+            if device_address not in [connected_device['address'] for connected_device in list_connected_devices()]:
+                phone = phone_connections[device_address]
+                phone.stop_thread()
+                logger.info(f"Stopped connection for device: {phone.get_name()} ({phone.get_address()})!")
+
+                connections_to_remove.append(device_address)
+        for connection in connections_to_remove:
+            phone_connections.pop(connection)
+
+        time.sleep(.5)
 
 
 def list_connected_devices():
@@ -58,8 +107,9 @@ def list_connected_devices():
 
 
 def main():
-    init_directory()
-    handle_devices()
+    logger = initialize_logging()
+    initialize_directory(logger)
+    handle_devices(logger)
 
 
 if __name__ == '__main__':

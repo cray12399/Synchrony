@@ -16,6 +16,9 @@ import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.SwitchCompat;
 
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.Objects;
 
 /**
@@ -34,7 +37,6 @@ public class PCDetailsActivity extends AppCompatActivity {
     private Button mSyncBtn;
     private Button mSendFileBtn;
     private SwitchCompat mPCConnectingSwitch;
-    private SwitchCompat mPCConnectAutomaticallySwitch;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -64,16 +66,28 @@ public class PCDetailsActivity extends AppCompatActivity {
                                 mPCConnectingSwitch.setChecked(Objects.requireNonNull(mPairedPC)
                                         .isConnecting());
                                 mPCConnectingSwitch.setEnabled(Utils.isConnected(recipientAddress));
+                                break;
                             }
                         }
 
-                        //TODO: Figure out why the connection isn't updating UI properly
-                        case BluetoothConnectionThread.SOCKET_CONNECTION_CHANGE_ACTION:
+                        case BluetoothConnectionThread.SOCKET_CONNECTION_CHANGE_ACTION: {
                             mPairedPC = Utils.getPairedPC(recipientAddress);
                             mSyncBtn.setEnabled(Objects.requireNonNull(mPairedPC)
                                     .isSocketConnected());
                             mSendClipboardBtn.setEnabled(mPairedPC.isSocketConnected());
                             mSendFileBtn.setEnabled(mPairedPC.isSocketConnected());
+                            break;
+                        }
+
+                        case Syncer.SYNC_ACTIVITY_CHANGE_ACTION: {
+                            boolean currentlySyncing = Objects.requireNonNull(
+                                    Utils.getPairedPC(recipientAddress)).isCurrentlySyncing();
+                            if (!currentlySyncing) {
+                                setLastSyncText(recipientAddress);
+                            }
+
+                            mSyncBtn.setEnabled(!currentlySyncing);
+                        }
                     }
                 }
             }
@@ -82,14 +96,28 @@ public class PCDetailsActivity extends AppCompatActivity {
         IntentFilter filter = new IntentFilter();
         filter.addAction(Utils.CONNECT_CHANGED_ACTION);
         filter.addAction(BluetoothConnectionThread.SOCKET_CONNECTION_CHANGE_ACTION);
+        filter.addAction(Syncer.SYNC_ACTIVITY_CHANGE_ACTION);
         getApplicationContext().registerReceiver(mainActivityReceiver, filter);
+    }
+
+    private void setLastSyncText(String pcAddress) {
+        TextView pcSyncText = findViewById(R.id.pcSyncText);
+        Date lastSync = Objects.requireNonNull(
+                Utils.getPairedPC(pcAddress)).getLastSync();
+        if (lastSync != null) {
+            DateFormat formatter = SimpleDateFormat.getDateTimeInstance(
+                    DateFormat.SHORT, DateFormat.SHORT);
+            String lastSyncString = formatter.format(lastSync);
+            pcSyncText.setText(lastSyncString);
+        } else {
+            pcSyncText.setText("Never");
+        }
     }
 
     private void initializeUi() {
         TextView pcNameText = findViewById(R.id.pcNameText);
         TextView pcAddressText = findViewById(R.id.pcAddressText);
         TextView pcTypeText = findViewById(R.id.pcTypeText);
-        TextView pcSyncText = findViewById(R.id.pcSyncText);
 
         // Show the Paired PC's information to the user.
         pcNameText.setText(mPairedPC.getName());
@@ -109,14 +137,14 @@ public class PCDetailsActivity extends AppCompatActivity {
             startActivity(mainActivityIntent);
         });
 
-        // Set the pcActiveSwitch to mark the PC as active or inactive from the details activity.
+        // Set the pc connecting switch to mark the PC as connecting or not
+        // from the details activity.
         mPCConnectingSwitch = findViewById(R.id.pcConnectingSwitch);
         mPCConnectingSwitch.setChecked(mPairedPC.isConnecting());
+        mPCConnectingSwitch.setOnCheckedChangeListener((buttonView, isChecked) ->
+                mPairedPC.setConnecting(isChecked));
         mPCConnectingSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            mPairedPC.setConnecting(isChecked);
-        });
-        mPCConnectingSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            Utils.notifyConnectChange(this.getApplicationContext(), mPairedPC.getAddress());
+            Utils.broadcastConnectChange(this.getApplicationContext(), mPairedPC.getAddress());
 
             if (!isChecked) {
                 for (BluetoothConnectionThread bluetoothConnectionThread :
@@ -124,20 +152,13 @@ public class PCDetailsActivity extends AppCompatActivity {
                     if (mPairedPC.getAddress()
                             .equals(bluetoothConnectionThread.getDeviceAddress())) {
                         if (bluetoothConnectionThread.isAlive()) {
-                            new Thread() {
-                                @Override
-                                public void run() {
-                                    runOnUiThread(() -> {
-                                        mPCConnectingSwitch.setEnabled(false);
-                                    });
-                                    while (bluetoothConnectionThread.isAlive()) {
-                                        SystemClock.sleep(10);
-                                    }
-                                    runOnUiThread(() -> {
-                                        mPCConnectingSwitch.setEnabled(true);
-                                    });
+                            new Thread(() -> {
+                                runOnUiThread(() -> mPCConnectingSwitch.setEnabled(false));
+                                while (bluetoothConnectionThread.isAlive()) {
+                                    SystemClock.sleep(10);
                                 }
-                            }.start();
+                                runOnUiThread(() -> mPCConnectingSwitch.setEnabled(true));
+                            }).start();
                         }
                     }
                 }
@@ -147,24 +168,25 @@ public class PCDetailsActivity extends AppCompatActivity {
                     Utils.getPairedPC(mPairedPC.getAddress())).setConnecting(isChecked);
         });
 
-        mPCConnectAutomaticallySwitch = findViewById(R.id.PCConnectAutomaticallySwitch);
-        mPCConnectAutomaticallySwitch.setChecked(mPairedPC.isConnectingAutomatically());
-        mPCConnectAutomaticallySwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            Utils.setPCConnectingAutomatically(mPairedPC.getAddress(), isChecked);
-        });
+        SwitchCompat pcConnectAutomaticallySwitch = findViewById(R.id.PCConnectAutomaticallySwitch);
+        pcConnectAutomaticallySwitch.setChecked(mPairedPC.isConnectingAutomatically());
+        pcConnectAutomaticallySwitch.setOnCheckedChangeListener((buttonView, isChecked) ->
+                Utils.setPCConnectingAutomatically(mPairedPC.getAddress(), isChecked));
 
         initializeSendClipboardBtn();
 
-        // UI variables.
+        // Set sync button to start sync with paired pc.
         mSyncBtn = findViewById(R.id.syncButton);
-        mSyncBtn.setOnClickListener(v -> {
-            BluetoothConnectionThread.doSync(this, mPairedPC.getAddress());
-        });
-        mSendFileBtn = findViewById(R.id.sendFileButton);
+        mSyncBtn.setOnClickListener(v ->
+                BluetoothConnectionThread.doSync(this, mPairedPC.getAddress()));
+        boolean currentlySyncing = Objects.requireNonNull(
+                Utils.getPairedPC(mPairedPC.getAddress())).isCurrentlySyncing();
+        mSyncBtn.setEnabled(mPairedPC.isSocketConnected() && !currentlySyncing);
 
-        mSyncBtn.setEnabled(mPairedPC.isSocketConnected());
-        mSendClipboardBtn.setEnabled(mPairedPC.isSocketConnected());
+        mSendFileBtn = findViewById(R.id.sendFileButton);
         mSendFileBtn.setEnabled(mPairedPC.isSocketConnected());
+
+        setLastSyncText(mPairedPC.getAddress());
     }
 
     private void initializeSendClipboardBtn() {
@@ -194,5 +216,6 @@ public class PCDetailsActivity extends AppCompatActivity {
                 Toast.makeText(this, "Clipboard is empty!", Toast.LENGTH_SHORT).show();
             }
         });
+        mSendClipboardBtn.setEnabled(mPairedPC.isSocketConnected());
     }
 }

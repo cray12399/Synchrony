@@ -2,6 +2,13 @@ package com.example.app;
 
 import android.bluetooth.BluetoothClass;
 import android.bluetooth.BluetoothDevice;
+import android.content.Context;
+
+import java.text.DateFormat;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.Calendar;
+import java.util.Date;
 
 /**
  * Class notates all current and previously Paired PC's and keeps track of their
@@ -12,13 +19,19 @@ public class PairedPC {
     private final String mPCAddress;
     private final String mPCType;
 
+    // Tracks whether the app should try to connect to the paired PC or not.
     private transient boolean mConnecting;
+
+    // Tracks whether the app should try to connect to the paired PC automatically or not.
     private boolean connectAutomatically = true;
 
-    private long mLastSync;
+    // Tracks the last time the PC was synced.
+    private transient Date mLastSync;
 
     // Bluetooth connection variables.
     private transient boolean mSocketConnected = false;
+
+    private boolean mCurrentlySyncing = false;
 
     public PairedPC(String pcName, String pcAddress, BluetoothDevice bluetoothDevice) {
         // PCName and PCAddress are assigned this way because they become null upon
@@ -70,5 +83,21 @@ public class PairedPC {
 
     public void setSocketConnected(boolean mSocketConnected) {
         this.mSocketConnected = mSocketConnected;
+    }
+
+    public Date getLastSync() {
+        return mLastSync;
+    }
+
+    public void setLastSync(Date lastSync) {
+        this.mLastSync = lastSync;
+    }
+
+    public boolean isCurrentlySyncing() {
+        return mCurrentlySyncing;
+    }
+
+    public void setCurrentlySyncing(boolean mCurrentlySyncing) {
+        this.mCurrentlySyncing = mCurrentlySyncing;
     }
 }

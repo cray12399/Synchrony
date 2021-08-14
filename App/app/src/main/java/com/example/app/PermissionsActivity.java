@@ -173,8 +173,6 @@ public class PermissionsActivity extends AppCompatActivity {
                 MainActivity.class);
         startActivity(mainActivityIntent);
         overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
-
-
     }
 
     /**

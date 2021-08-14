@@ -46,7 +46,6 @@ public class PCRecViewAdapter extends RecyclerView.Adapter<PCRecViewAdapter.View
     @Override
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         PairedPC listedPC = mListedPCS.get(position);
-        System.out.println(mListedPCS);
         holder.pcNameText.setText(listedPC.getName());
         holder.pcAddressText.setText(listedPC.getAddress());
         holder.pcTypeText.setText(listedPC.getPCType());
@@ -68,7 +67,7 @@ public class PCRecViewAdapter extends RecyclerView.Adapter<PCRecViewAdapter.View
         // Set the pcActiveSwitch to toggle the Paired PC's connect status.
         holder.pcConnectingSwitch.setChecked(mListedPCS.get(position).isConnecting());
         holder.pcConnectingSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            Utils.notifyConnectChange(mContext.getApplicationContext(), listedPC.getAddress());
+            Utils.broadcastConnectChange(mContext.getApplicationContext(), listedPC.getAddress());
 
             Objects.requireNonNull(
                     Utils.getPairedPC(listedPC.getAddress())).setConnecting(isChecked);

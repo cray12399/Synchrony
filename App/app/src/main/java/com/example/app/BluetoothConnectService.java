@@ -65,8 +65,10 @@ public class BluetoothConnectService extends Service {
         return START_STICKY_COMPATIBILITY;
     }
 
-    /** Method search for all compatible bonded devices and add them to pairedPCS. Then,
-     *  populate the pcRecViewAdapter in MainActivity*/
+    /**
+     * Search for all compatible bonded devices and add them to pairedPCS. Then,
+     * populate the pcRecViewAdapter in MainActivity.
+     */
     private void searchForCompatibleDevices() {
         // Iterate all bonded bluetooth devices to find compatible PC's
         for (BluetoothDevice bluetoothDevice :
@@ -95,7 +97,7 @@ public class BluetoothConnectService extends Service {
                             "Automatically connecting device: %s!", deviceTag));
 
                     // Notify the MainActivity that it is connecting.
-                    Utils.notifyConnectChange(getApplicationContext(),
+                    Utils.broadcastConnectChange(getApplicationContext(),
                             bluetoothDevice.getAddress());
                     Log.d(TAG, String.format("searchForCompatibleDevices: " +
                                     "Notified main activity of connecting status for device: %s!",
@@ -131,7 +133,7 @@ public class BluetoothConnectService extends Service {
                             Objects.requireNonNull(Utils.getPairedPC(bluetoothDevice.getAddress()))
                                     .setConnecting(true);
 
-                            Utils.notifyConnectChange(getApplicationContext(),
+                            Utils.broadcastConnectChange(getApplicationContext(),
                                     bluetoothDevice.getAddress());
                         }
                         break;
@@ -151,7 +153,7 @@ public class BluetoothConnectService extends Service {
 
                         stopConnection(bluetoothDevice);
 
-                        Utils.notifyConnectChange(getApplicationContext(),
+                        Utils.broadcastConnectChange(getApplicationContext(),
                                 bluetoothDevice.getAddress());
                         break;
                     }
@@ -207,9 +209,9 @@ public class BluetoothConnectService extends Service {
         String deviceAddress = bluetoothDevice.getAddress();
         String deviceName = bluetoothDevice.getName();
 
+        // Interrupt all associated bluetooth connection threads for the device.
         for (BluetoothConnectionThread bluetoothConnectionThread :
                 Utils.getCurrentlyRunningThreads()) {
-            // If thread's associated device address matches PC address, interrupt it.
             if (bluetoothConnectionThread.getDeviceAddress().equals(deviceAddress)) {
                 bluetoothConnectionThread.interrupt();
             }
@@ -280,8 +282,10 @@ public class BluetoothConnectService extends Service {
         return null;
     }
 
-    // TODO: Add some comments and logs to PCListenerThread
-
+    /**
+     * Thread responsible for listening for compatible devices and assigning connection
+     * threads as needed
+     */
     private class PCListenerThread extends Thread {
         private BluetoothServerSocket mBluetoothServerSocket;
         private final Context mContext;
@@ -301,14 +305,16 @@ public class BluetoothConnectService extends Service {
                             Log.d(TAG, "run: Listening for devices...");
                             bluetoothSocket = mBluetoothServerSocket.accept();
                         }
+                    } else if (!interrupted() && mBluetoothServerSocket == null) {
+                        mBluetoothServerSocket = getBluetoothServerSocket();
                     }
                 } catch (IOException e) {
                     Log.e(TAG, "run: Error accepting device connection:", e);
                 }
 
                 if (bluetoothSocket != null) {
-                    Log.d(TAG, "run: " +
-                            "Established connection with a device!");
+                    Log.d(TAG, "run: Established connection with a device!");
+
                     String connectedSocketAddress = bluetoothSocket.getRemoteDevice().getAddress();
                     String connectedSocketName = bluetoothSocket.getRemoteDevice().getName();
                     String deviceTag = String.format("%s (%s)", connectedSocketName,
@@ -327,7 +333,9 @@ public class BluetoothConnectService extends Service {
                             }
                         }
                     }
-                    // Close the socket if the device is not in paired PC's or is not connecting.
+
+                    // Close the socket if the device is not in paired PC's or the
+                    // paired PC is not set as connecting.
                     if (closeSocket) {
                         try {
                             bluetoothSocket.close();

@@ -34,10 +34,13 @@ public class MainActivity extends AppCompatActivity {
     // Action variables.
     public static final String ADD_TO_PC_LIST = "addToPCList";
     public static final String ADDED_PC_KEY = "addedPCKey";
+
     // Logging tag variables.
     private static final String TAG = "MainActivity";
+
     // Used to list paired PC's in pcRecViewAdapter
     private final ArrayList<PairedPC> mListedPCS = new ArrayList<>();
+
     // UI Variables
     private DrawerLayout mMenuDrawer;
     private Button mPairBtn;
@@ -107,7 +110,7 @@ public class MainActivity extends AppCompatActivity {
 
         mUnpairedLayout = findViewById(R.id.unpairedLayout);
 
-        // btDisconnectSnackbar used to prompt the user to re-enable bluetooth.
+        // btDisconnectSnackBar used to prompt the user to re-enable bluetooth.
         mBTDisconnectedSnackBar = Snackbar.make(mUnpairedLayout,
                 "Bluetooth not enabled!",
                 Snackbar.LENGTH_INDEFINITE);
@@ -129,6 +132,7 @@ public class MainActivity extends AppCompatActivity {
                     new Intent(this, BluetoothConnectService.class);
             startForegroundService(connectServiceIntent);
             Log.d(TAG, "initializePCListing: BluetoothConnectService started in foreground!");
+
             // If it is running, try to populate the pcRecViewAdapter with connected Paired PC's.
         } else {
             for (PairedPC pairedPC : Utils.getPairedPCS()) {
@@ -164,6 +168,7 @@ public class MainActivity extends AppCompatActivity {
                 mBTDisconnectedSnackBar.show();
                 Log.d(TAG, "initializePCListing: " +
                         "Bluetooth not enabled! Prompting user to enable!");
+
                 // If it is enabled, begin listing all connected PC's
             } else {
                 // If no PC's are found, show the unpaired layout
@@ -184,7 +189,6 @@ public class MainActivity extends AppCompatActivity {
                 switch (intent.getAction()) {
                     case ADD_TO_PC_LIST: {
                         String pcAddress = intent.getStringExtra(ADDED_PC_KEY);
-                        System.out.println(pcAddress);
                         addToPcRecViewAdapter(pcAddress);
                     }
                     case BluetoothAdapter.ACTION_STATE_CHANGED:
