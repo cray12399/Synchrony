@@ -1,13 +1,14 @@
-import utils
-from Phone import Phone
+import logging
+import os
 import sys
 import time
+from configparser import ConfigParser
+from datetime import datetime
+
 import bluetooth
 import pydbus
-import os
-import logging
-from datetime import datetime
-from configparser import ConfigParser
+
+from Phone import Phone
 
 
 def initialize_logging():
@@ -26,7 +27,7 @@ def initialize_logging():
                         handlers=handlers)
 
     logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG)
 
     return logging.getLogger()
 

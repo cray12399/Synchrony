@@ -3,6 +3,8 @@ package com.example.app;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.provider.Telephony;
+import android.telephony.SmsMessage;
 import android.util.Log;
 
 /**
@@ -15,7 +17,7 @@ public class SystemReceiver extends BroadcastReceiver {
     public void onReceive(Context context, Intent intent) {
         System.out.println(intent.getAction());
         switch (intent.getAction()) {
-            case Intent.ACTION_BOOT_COMPLETED:
+            case Intent.ACTION_BOOT_COMPLETED: {
                 Utils.initValues(context);
 
                 Log.d(TAG, "onReceive: Starting BluetoothSyncThread in foreground...");
@@ -23,6 +25,7 @@ public class SystemReceiver extends BroadcastReceiver {
                 Intent syncServiceIntent = new Intent(context, BluetoothConnectService.class);
                 context.startForegroundService(syncServiceIntent);
                 break;
+            }
         }
     }
 }

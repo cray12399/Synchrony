@@ -86,7 +86,12 @@ public class PCDetailsActivity extends AppCompatActivity {
                                 setLastSyncText(recipientAddress);
                             }
 
-                            mSyncBtn.setEnabled(!currentlySyncing);
+                            if (!Objects.requireNonNull(mPairedPC)
+                                    .isSocketConnected()) {
+                                mSyncBtn.setEnabled(false);
+                            } else {
+                                mSyncBtn.setEnabled(!currentlySyncing);
+                            }
                         }
                     }
                 }

@@ -11,6 +11,10 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.SystemClock;
+import android.provider.CallLog;
+import android.provider.Telephony;
+import android.telephony.SmsMessage;
+import android.telephony.TelephonyManager;
 import android.util.Log;
 
 import androidx.core.app.NotificationCompat;
@@ -216,7 +220,7 @@ class BluetoothConnectionThread extends Thread {
             @Override
             public void onReceive(Context context, Intent intent) {
                 String broadcastRecipient = intent.getStringExtra(Utils.RECIPIENT_ADDRESS_KEY);
-                if (broadcastRecipient.equals(mDevice.getAddress())) {
+                if (broadcastRecipient != null && broadcastRecipient.equals(mDevice.getAddress())) {
                     switch (intent.getAction()) {
                         // If the user sent their clipboard from the PCDetailActivity.
                         case SEND_CLIPBOARD_ACTION: {
@@ -248,20 +252,19 @@ class BluetoothConnectionThread extends Thread {
 
                         // If the user chooses to sync the device manually.
                         case DO_SYNC_ACTION: {
-                            // Just in case there are any running syncs, cancel them.
-                            if (mSyncer != null) {
-                                if (mSyncer.isAlive()) {
-                                    mSyncer.interrupt();
-                                }
-                            }
-
-                            mSyncer = new Syncer(mContext, mBluetoothSocket);
-                            mSyncer.start();
+                            sync(Syncer.SYNC_ALL);
                             break;
                         }
 
                         case UPDATE_HEARTBEAT_TIMING_ACTION: {
                             mLastClientHeartBeat = System.currentTimeMillis();
+                            break;
+                        }
+                    }
+                } else {
+                    switch (intent.getAction()) {
+                        case (Telephony.Sms.Intents.SMS_RECEIVED_ACTION): {
+                            sync(Syncer.SYNC_MESSAGES);
                             break;
                         }
                     }
@@ -274,8 +277,21 @@ class BluetoothConnectionThread extends Thread {
         filter.addAction(STOP_CONNECTION_ACTION);
         filter.addAction(DO_SYNC_ACTION);
         filter.addAction(UPDATE_HEARTBEAT_TIMING_ACTION);
+        filter.addAction(Telephony.Sms.Intents.SMS_RECEIVED_ACTION);
         mContext.getApplicationContext()
                 .registerReceiver(mBluetoothConnectionThreadReceiver, filter);
+    }
+
+    private void sync(int toSync) {
+        // Just in case there are any running syncs, cancel them.
+        if (mSyncer != null) {
+            if (mSyncer.isAlive()) {
+                mSyncer.interrupt();
+            }
+        }
+
+        mSyncer = new Syncer(mContext, mBluetoothSocket, toSync);
+        mSyncer.start();
     }
 
     private void closeBluetoothSocket() {
@@ -366,7 +382,7 @@ class BluetoothConnectionThread extends Thread {
                 mSyncer.setClientContactPhotoHashes(clientPhotos);
             }
 
-        } else if (clientCommand.contains("have_messages:")) {
+        } else if (clientCommand.contains("have_message_ids:")) {
             Log.d(TAG, String.format("handleCommand: " +
                     "Received message ids from device: %s!", mDeviceTag));
 
@@ -376,6 +392,17 @@ class BluetoothConnectionThread extends Thread {
                 ArrayList<Long> clientMessageIDs = gson.fromJson(jsonString,
                         new TypeToken<ArrayList<Long>>() {}.getType());
                 mSyncer.setClientMessageIDs(clientMessageIDs);
+            }
+        }  else if (clientCommand.contains("have_call_ids:")) {
+            Log.d(TAG, String.format("handleCommand: " +
+                    "Received call ids from device: %s!", mDeviceTag));
+
+            if (mSyncer != null) {
+                Gson gson = new Gson();
+                String jsonString = clientCommand.split(": ")[1];
+                ArrayList<Long> clientCallIDs = gson.fromJson(jsonString,
+                        new TypeToken<ArrayList<Long>>() {}.getType());
+                mSyncer.setClientCallIds(clientCallIDs);
             }
         }
     }
@@ -424,8 +451,7 @@ class BluetoothConnectionThread extends Thread {
                 Utils.getPairedPC(mDevice.getAddress())).getLastSync();
         if (lastSync == null || System.currentTimeMillis() - lastSync.getTime() > syncInterval) {
             if (mSyncer == null || !mSyncer.isAlive()) {
-                mSyncer = new Syncer(mContext, mBluetoothSocket);
-                mSyncer.start();
+                sync(Syncer.SYNC_ALL);
             }
         }
 
@@ -456,5 +482,9 @@ class BluetoothConnectionThread extends Thread {
 
         // Sleep the thread so it isn't draining the phone's resources.
         SystemClock.sleep(500);
+    }
+
+    public int getNotificationID() {
+        return mNotificationID;
     }
 }

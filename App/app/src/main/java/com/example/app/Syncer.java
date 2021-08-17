@@ -8,6 +8,7 @@ import android.content.Intent;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.SystemClock;
+import android.provider.CallLog;
 import android.provider.ContactsContract;
 import android.provider.Telephony;
 import android.util.Log;
@@ -18,15 +19,19 @@ import androidx.core.content.PermissionChecker;
 import com.google.common.base.Splitter;
 import com.google.gson.Gson;
 
+import org.checkerframework.checker.units.qual.A;
+
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Calendar;
-import java.util.Date;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Syncer class is a thread that syncs information with the client device in the background. Is
@@ -37,8 +42,17 @@ public class Syncer extends Thread {
     private static final String TAG = "Syncer";
     private final String mDeviceTag;
 
-    // Action and key variables.
+    // Action variables.
     public final static String SYNC_ACTIVITY_CHANGE_ACTION = "syncActivityChangeAction";
+
+    // Int variables to tell the syncer what it should sync.
+    public final static int SYNC_ALL = 0;
+    public final static int SYNC_CONTACTS = 1;
+    public final static int SYNC_MESSAGES = 2;
+    public final static int SYNC_CALLS = 3;
+
+    // Tells the syncer what it should sync.
+    private final int mToSync;
 
     // Constructor variables
     private final Context mContext;
@@ -52,12 +66,16 @@ public class Syncer extends Thread {
     // Stores a simple readout of the ids of the messages on the client device.
     private ArrayList<Long> mClientMessageIDs;
 
+    // Store a simple readout of the ids of the calls on the client device.
+    private ArrayList<Long> mClientCallIds;
+
     // Used to determine whether the thread should stop syncing.
     private boolean stopSync = false;
 
-    public Syncer(Context mContext, BluetoothSocket mBluetoothSocket) {
+    public Syncer(Context mContext, BluetoothSocket mBluetoothSocket, int toSync) {
         this.mContext = mContext;
         this.mBluetoothSocket = mBluetoothSocket;
+        this.mToSync = toSync;
 
         this.mDeviceTag = String.format("%s (%s)", mBluetoothSocket.getRemoteDevice().getName(),
                 mBluetoothSocket.getRemoteDevice().getAddress());
@@ -73,12 +91,23 @@ public class Syncer extends Thread {
         // If contact permissions are given, sync contacts with the device.
         if (ContextCompat.checkSelfPermission(mContext, Manifest.permission.READ_CONTACTS) ==
                 PermissionChecker.PERMISSION_GRANTED) {
-            new ContactsSync().syncContacts();
+            if (mToSync == SYNC_ALL || mToSync == SYNC_CONTACTS) {
+                new ContactsSync().syncContacts();
+            }
         }
 
         if (ContextCompat.checkSelfPermission(mContext, Manifest.permission.READ_SMS) ==
                 PermissionChecker.PERMISSION_GRANTED) {
-            new MessagesSync().syncMessages();
+            if (mToSync == SYNC_ALL || mToSync == SYNC_MESSAGES) {
+                new MessagesSync().syncMessages();
+            }
+        }
+
+        if (ContextCompat.checkSelfPermission(mContext, Manifest.permission.READ_CALL_LOG) ==
+                PermissionChecker.PERMISSION_GRANTED) {
+            if (mToSync == SYNC_ALL || mToSync == SYNC_CALLS) {
+                new CallSync().syncCalls();
+            }
         }
 
         // Broadcast the stopping of the sync background to the rest of the app.
@@ -100,6 +129,10 @@ public class Syncer extends Thread {
 
     public void setClientMessageIDs(ArrayList<Long> mClientMessageIDs) {
         this.mClientMessageIDs = mClientMessageIDs;
+    }
+
+    public void setClientCallIds(ArrayList<Long> mClientCallIds) {
+        this.mClientCallIds = mClientCallIds;
     }
 
     @Override
@@ -140,11 +173,13 @@ public class Syncer extends Thread {
                 }
             }
 
+            ArrayList<Contact> phoneContacts = getPhoneContacts();
+
             // Once client contact hashes are received send any updated contact info to client and
             // delete any old contacts on the client device.
             if (!stopSync) {
-                sendContactsInfo(getPhoneContacts());
-                deleteOldContacts(getPhoneContacts());
+                sendContactsInfo(phoneContacts);
+                deleteOldContacts(phoneContacts);
             }
 
             BluetoothConnectionThread.sendCommand(mBluetoothSocket,
@@ -161,7 +196,7 @@ public class Syncer extends Thread {
             }
 
             if (!stopSync) {
-                sendContactPhotos(getPhoneContacts());
+                sendContactPhotos(phoneContacts);
             }
         }
 
@@ -307,29 +342,31 @@ public class Syncer extends Thread {
             for (Map.Entry<Long, Long> clientContact : mClientContactHashes.entrySet()) {
                 if (!stopSync) {
                     // Iterate over client contact id's and check for old contacts.
-                    boolean removeClientContact = true;
+                    boolean deleteClientContact = true;
                     for (Contact phoneContact : phoneContacts) {
                         if (phoneContact.getPrimaryKey() == clientContact.getKey()) {
-                            removeClientContact = false;
+                            deleteClientContact = false;
+                            break;
                         }
                     }
 
                     // If a contact from the client doesn't exist on the phone,
                     // tell the client to delete it.
-                    if (removeClientContact) {
+                    if (deleteClientContact) {
                         Log.d(TAG, String.format("deleteOldContacts: " +
                                         "Telling client to delete entry for contact id: %s " +
                                         "from device: %s!",
                                 clientContact.getKey(), mDeviceTag));
 
                         BluetoothConnectionThread.sendCommand(mBluetoothSocket,
-                                ("delete_contact: " + clientContact.getKey() + ""));
+                                ("delete_contact: " + clientContact.getKey()));
                     }
                 }
             }
         }
 
-        /** Checks for outdated or missing client contact photos and sends updated contact photos. */
+        /** Checks for outdated or missing client contact photos and sends updated
+         *  contact photos. */
 
         private void sendContactPhotos(ArrayList<Contact> phoneContacts) {
             Log.d(TAG, String.format("sendContactPhotos: " +
@@ -400,75 +437,55 @@ public class Syncer extends Thread {
                 }
             }
 
-            sendMessages();
+            if (!stopSync) {
+                ArrayList<Message> phoneMessages = getPhoneMessages();
+                sendMessages(phoneMessages);
+                deleteOldMessages(phoneMessages);
+            }
         }
 
-        private ArrayList<Message> getMessages() {
-            Cursor cursor = mContext.getContentResolver().query(Uri.parse("content://sms/inbox"),
+        private ArrayList<Message> getPhoneMessages() {
+            Cursor cursor = mContext.getContentResolver().query(Uri.parse("content://sms/"),
                     null, null, null, null);
 
             ArrayList<Message> phoneMessages = new ArrayList<>();
-            if (cursor.moveToFirst()) {
-                do {
-                    Message message = new Message();
-                    for(int id = 0; id < cursor.getColumnCount(); id++) {
+            while (cursor.moveToNext() && !stopSync) {
+                Message message = new Message();
 
-                        switch (cursor.getColumnName(id)) {
-                            case "_id": {
-                                message.setId(Integer.parseInt(cursor.getString(id)));
-                                break;
-                            }
+                message.setId(cursor.getLong(
+                        cursor.getColumnIndexOrThrow(Telephony.Sms._ID)));
+                message.setBody(cursor.getString(
+                        cursor.getColumnIndexOrThrow(Telephony.Sms.BODY)));
+                message.setThreadId(cursor.getLong(
+                        cursor.getColumnIndexOrThrow(Telephony.Sms.THREAD_ID)));
+                message.setNumber(cursor.getString(
+                        cursor.getColumnIndexOrThrow(Telephony.Sms.ADDRESS)));
+                message.setRead(cursor.getInt(
+                        cursor.getColumnIndexOrThrow(Telephony.Sms.READ)));
 
-                            case "body": {
-                                message.setBody(cursor.getString(id));
-                                break;
-                            }
+                DateFormat formatter = SimpleDateFormat.getDateTimeInstance(
+                        DateFormat.SHORT, DateFormat.SHORT);
+                Calendar calendar = Calendar.getInstance();
+                calendar.setTimeInMillis(cursor.getLong(
+                        cursor.getColumnIndexOrThrow(Telephony.Sms.DATE_SENT)));
+                message.setDateSent(formatter.format(calendar.getTime()));
 
-                            case "thread_id": {
-                                message.setThreadId(Integer.parseInt(cursor.getString(id)));
-                                break;
-                            }
+                int type = cursor.getInt(cursor.getColumnIndexOrThrow(Telephony.Sms.TYPE));
+                switch (type) {
+                    case Telephony.Sms.MESSAGE_TYPE_INBOX:
+                        message.setType("Received");
+                        break;
+                    case Telephony.Sms.MESSAGE_TYPE_SENT:
+                        message.setType("Sent");
+                        break;
+                    case Telephony.Sms.MESSAGE_TYPE_OUTBOX:
+                        message.setType("Outbox");
+                        break;
+                    default:
+                        break;
+                }
 
-                            case "address": {
-                                message.setNumber(cursor.getString(id));
-                                break;
-                            }
-
-                            case "date_sent": {
-                                DateFormat formatter = SimpleDateFormat.getDateTimeInstance(
-                                        DateFormat.SHORT, DateFormat.SHORT);
-                                Calendar calendar = Calendar.getInstance();
-                                calendar.setTimeInMillis(Long.parseLong(cursor.getString(id)));
-                                message.setDateSent(formatter.format(calendar.getTime()));
-                                break;
-                            }
-
-                            case "type": {
-                                int type = Integer.parseInt(cursor.getString(id));
-                                switch (type) {
-                                    case Telephony.Sms.MESSAGE_TYPE_INBOX:
-                                        message.setType("receivedMessage");
-                                        break;
-                                    case Telephony.Sms.MESSAGE_TYPE_SENT:
-                                        message.setType("sentMessage");
-                                        break;
-                                    case Telephony.Sms.MESSAGE_TYPE_OUTBOX:
-                                        message.setType("outboxMessage");
-                                        break;
-                                    default:
-                                        break;
-                                }
-                                break;
-                            }
-
-                            case "read": {
-                                message.setRead(Integer.parseInt(cursor.getString(id)));
-                                break;
-                            }
-                        }
-                    }
-                    phoneMessages.add(message);
-                } while (cursor.moveToNext());
+                phoneMessages.add(message);
             }
 
             cursor.close();
@@ -476,9 +493,9 @@ public class Syncer extends Thread {
             return phoneMessages;
         }
 
-        private void sendMessages() {
+        private void sendMessages(ArrayList<Message> phoneMessages) {
             // If a message's id isn't present in the client's message id's, send it to the client.
-            for (Message phoneMessage : getMessages()) {
+            for (Message phoneMessage : phoneMessages) {
                 if (!mClientMessageIDs.contains(phoneMessage.getId())) {
                     BluetoothConnectionThread.sendCommand(mBluetoothSocket,
                             String.format("incoming_message: %s",
@@ -486,13 +503,189 @@ public class Syncer extends Thread {
                 }
             }
         }
+
+        private void deleteOldMessages(ArrayList<Message> phoneMessages) {
+            for (Long clientMessageId : mClientMessageIDs) {
+                if (!stopSync) {
+                    boolean deleteMessage = true;
+                    for (Message phoneMessage : phoneMessages) {
+                        if (phoneMessage.getId() == clientMessageId) {
+                            deleteMessage = false;
+                            break;
+                        }
+                    }
+
+                    if (deleteMessage) {
+                        BluetoothConnectionThread.sendCommand(mBluetoothSocket,
+                                ("delete_message: " + clientMessageId));
+                    }
+                }
+            }
+        }
     }
 
-    private class TelephonySync {}
+    private class CallSync {
+        private void syncCalls() {
+            BluetoothConnectionThread.sendCommand(mBluetoothSocket,
+                    "check_call_ids");
 
-    private static class Message {
+            // Wait for call ids from client device.
+            while (mClientCallIds == null) {
+                String pcAddress = mBluetoothSocket.getRemoteDevice().getAddress();
+                if (!Objects.requireNonNull(Utils.getPairedPC(pcAddress)).isSocketConnected()) {
+                    stopSync = true;
+                }
+
+                if (stopSync) {
+                    break;
+                }
+            }
+
+            if (!stopSync) {
+                ArrayList<Call> phoneCalls = getPhoneCalls();
+                sendPhoneCalls(phoneCalls);
+                deleteOldPhoneCalls(phoneCalls);
+            }
+        }
+
+        private ArrayList<Call> getPhoneCalls() {
+            Cursor cursor = mContext.getContentResolver().query(CallLog.Calls.CONTENT_URI,
+                    null, null, null, null);
+
+            ArrayList<Call> phoneCalls = new ArrayList<>();
+            while (cursor.moveToNext() && !stopSync) {
+                Call call = new Call();
+
+                call.setId(cursor.getLong(
+                        cursor.getColumnIndexOrThrow(CallLog.Calls._ID)));
+                call.setNumber(cursor.getString(
+                        cursor.getColumnIndexOrThrow(CallLog.Calls.NUMBER)));
+
+                int durationMillis = cursor.getInt(
+                        cursor.getColumnIndexOrThrow(CallLog.Calls.DURATION)) * 1000;
+                String duration = String.format(Locale.getDefault(), "%02d:%02d:%02d",
+                        TimeUnit.MILLISECONDS.toHours(durationMillis),
+                        TimeUnit.MILLISECONDS.toMinutes(durationMillis) %
+                                TimeUnit.HOURS.toMinutes(1),
+                        TimeUnit.MILLISECONDS.toSeconds(durationMillis) %
+                                TimeUnit.MINUTES.toSeconds(1));
+                call.setDuration(duration);
+
+                DateFormat dateFormatter = SimpleDateFormat.getDateTimeInstance(
+                        DateFormat.SHORT, DateFormat.SHORT);
+                Calendar calendar = Calendar.getInstance();
+                calendar.setTimeInMillis(cursor.getLong(
+                        cursor.getColumnIndexOrThrow(CallLog.Calls.DATE)));
+                call.setDate(dateFormatter.format(calendar.getTime()));
+
+                int type = cursor.getInt(cursor.getColumnIndexOrThrow(CallLog.Calls.TYPE));
+                switch (type) {
+                    case CallLog.Calls.OUTGOING_TYPE:
+                        call.setType("Outgoing");
+                        break;
+                    case CallLog.Calls.INCOMING_TYPE:
+                        call.setType("Incoming");
+                        break;
+
+                    case CallLog.Calls.MISSED_TYPE:
+                        call.setType("Missed");
+                        break;
+                }
+
+                phoneCalls.add(call);
+            }
+
+
+            cursor.close();
+            return phoneCalls;
+        }
+
+        private void sendPhoneCalls(ArrayList<Call> phoneCalls) {
+            for (Call call : phoneCalls) {
+                if (!mClientCallIds.contains(call.getId())) {
+                    BluetoothConnectionThread.sendCommand(mBluetoothSocket,
+                            String.format("incoming_call: %s",
+                                    call.toJson()));
+                }
+            }
+        }
+
+        private void deleteOldPhoneCalls(ArrayList<Call> phoneCalls) {
+            for (Long clientCallId : mClientCallIds) {
+                if (!stopSync) {
+                    boolean deleteCall = true;
+                    for (Call phoneCall : phoneCalls) {
+                        if (phoneCall.getId() == clientCallId) {
+                            deleteCall = false;
+                            break;
+                        }
+                    }
+
+                    if (deleteCall) {
+                        BluetoothConnectionThread.sendCommand(mBluetoothSocket,
+                                ("delete_call: " + clientCallId));
+                    }
+                }
+            }
+        }
+    }
+
+    public static class Call {
         private long mId;
-        private int mThreadId;
+        private String mNumber;
+        private String mType = "None";
+        private String mDate;
+        private String mDuration;
+
+        public long getId() {
+            return mId;
+        }
+
+        public void setId(long mId) {
+            this.mId = mId;
+        }
+
+        public String getNumber() {
+            return mNumber;
+        }
+
+        public void setNumber(String mNumber) {
+            this.mNumber = mNumber;
+        }
+
+        public String getType() {
+            return mType;
+        }
+
+        public void setType(String mType) {
+            this.mType = mType;
+        }
+
+        public String getDate() {
+            return mDate;
+        }
+
+        public void setDate(String mDate) {
+            this.mDate = mDate;
+        }
+
+        public String getDuration() {
+            return mDuration;
+        }
+
+        public void setDuration(String mDuration) {
+            this.mDuration = mDuration;
+        }
+
+        public String toJson() {
+            Gson gson = new Gson();
+            return gson.toJson(this);
+        }
+    }
+
+    public static class Message {
+        private long mId;
+        private long mThreadId;
         private String mNumber;
         private String mDateSent;
         private String mType;
@@ -508,15 +701,15 @@ public class Syncer extends Thread {
             return mId;
         }
 
-        public void setId(int mId) {
+        public void setId(long mId) {
             this.mId = mId;
         }
 
-        public int getThreadId() {
+        public long getThreadId() {
             return mThreadId;
         }
 
-        public void setThreadId(int mThreadId) {
+        public void setThreadId(long mThreadId) {
             this.mThreadId = mThreadId;
         }
 
@@ -561,7 +754,7 @@ public class Syncer extends Thread {
         }
     }
 
-    private static class Contact {
+    public static class Contact {
         private final String mName;
         private transient Iterable<String> mPhoto;
         private final HashMap<String, String> mPhones = new HashMap<>();

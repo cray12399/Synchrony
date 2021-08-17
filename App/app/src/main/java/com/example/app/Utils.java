@@ -51,6 +51,7 @@ public class Utils {
     // Keeps track of whether the Bluetooth Connect Service is running in the foreground or not.
     private static boolean sForegroundRunning = false;
 
+    // Delimits commands so that they can be separated when written to an output stream.
     public static final String COMMAND_DELIMITER = "``;";
 
     /**
@@ -84,7 +85,6 @@ public class Utils {
         Log.d(TAG, "initValues: successfully initialized utils values.");
     }
 
-    // Used to check if the app is on its first run.
     public static boolean isFirstRun() {
         if (sSharedPreferences.getBoolean(sFirstRunKey, true)) {
             sSharedPreferences.edit().putBoolean(sFirstRunKey, false).apply();
@@ -148,7 +148,6 @@ public class Utils {
         return java.util.UUID.fromString(sUUID);
     }
 
-    /** Checks if bluetooth devices are actually connected or not. */
     public static boolean isConnected(String address) {
         Set<BluetoothDevice> pairedDevices = BluetoothAdapter.getDefaultAdapter()
                 .getBondedDevices();
@@ -212,9 +211,6 @@ public class Utils {
         sForegroundRunning = foregroundRunning;
     }
 
-    /**
-     * Static method that allows other classes to notify the app of a device's connect status.
-     */
     public static void broadcastConnectChange(Context applicationContext, String pcAddress) {
         Intent connectChangedIntent = new Intent();
         connectChangedIntent.setAction(Utils.CONNECT_CHANGED_ACTION);

@@ -1,15 +1,15 @@
-import json
-import logging
-
 import syncing
 import utils
+
+import json
+import logging
 import os
-import pyclip
 import threading
-import bluetooth
 import time
-from datetime import datetime, timedelta
 from configparser import ConfigParser
+from datetime import datetime, timedelta
+import bluetooth
+import pyclip
 
 
 class Phone:
@@ -93,109 +93,131 @@ class Phone:
             server_commands = server_commands.split(utils.COMMAND_DELIMITER)
 
             for server_command in server_commands:
-                # If a server heartbeat is received, acknowledge it with a client heartbeat.
-                if server_command == 'server_heartbeat':
-                    bluetooth_socket.send("client_heartbeat" + utils.COMMAND_DELIMITER)
-
-                # If the device server requests the contact infos that are currently synced on the current device,
-                # return a list of the hashes for each currently synced contact's info.
-                elif server_command == 'check_contact_info_hashes':
-                    self.__logger.info(f"Sending contact info hashes to device: {self.__name} ({self.__address})...")
-                    syncing.Contacts.send_contact_info_hashes(self.__directory, bluetooth_socket, self.__logger)
-
-                # If the device server requests the contact photos that are currently synced on the current device,
-                # return a list of the hashes for each currently synced contact's photo.
-                elif server_command == 'check_contact_photo_hashes':
-                    self.__logger.info(f"Sending contact photo hashes to device: {self.__name} ({self.__address})...")
-                    syncing.Contacts.send_contact_photo_hashes(self.__directory, bluetooth_socket, self.__logger)
-
-                elif server_command == 'check_message_ids':
-                    self.__logger.info(f"Sending message ids to device: {self.__name} ({self.__address})...")
-                    # threading.Thread(target=syncer.Messages.send_message_ids,
-                    #                  args=(self.__directory, bluetooth_socket, self.__logger)).start()
-                    syncing.Messages.send_message_ids(self.__directory, bluetooth_socket, self.__logger)
-
-                # If the server sends the clipboard from the target device, copy it to current device.
-                elif 'incoming_clipboard:' in server_command:
-                    pyclip.copy(server_command.replace("incoming_clipboard: ", ""))
-                    self.__logger.info(f"Copied clipboard from device: {self.__name} ({self.__address})!")
-
-                # If the server sends a contact, try to write it to the database of the current device.
-                elif 'incoming_contact:' in server_command:
-                    contact = server_command.replace("incoming_contact: ", "")
-
-                    self.__logger.info(f"Writing contact: {json.loads(contact)['mName']} from device: "
-                                       f"{self.__name} ({self.__address}) to contacts...")
-                    syncing.Contacts.write_contact_to_database(self.__directory, contact, self.__logger)
-
-                # If the server sends part of a contact photo, write it to the contact photo buffer, or write it
-                # to the database if it is complete.
-                elif 'incoming_contact_photo_part:' in server_command:
-                    self.handle_incoming_photo_part_command(server_command)
-
-                elif 'incoming_message:' in server_command:
-                    message = server_command.replace("incoming_message: ", "")
-                    syncing.Messages.write_message_to_database(self.__directory, message, self.__logger)
-
-                # If the server tells the current device to delete a currently synced contact, delete it.
-                elif 'delete_contact:' in server_command:
-                    contact_id = int(server_command.replace("delete_contact: ", ""))
-                    self.__logger.info(f"Deleting entries for contact id: {contact_id} from contacts...")
-                    syncing.Contacts.remove_contact_from_database(self.__directory, contact_id, self.__logger)
-
                 # If the server command isn't blank, update the heartbeat time, since
                 # a command is equivalent to a heartbeat.
                 if server_command != "":
                     self.__logger.debug(f"Command received from device: {self.__name} ({self.__address}):"
                                         f" {server_command}!")
                     self.__last_heartbeat = datetime.now()
-        except bluetooth.btcommon.BluetoothError as e:
+
+                # If a server heartbeat is received, acknowledge it with a client heartbeat.
+                if server_command == 'server_heartbeat':
+                    bluetooth_socket.send("client_heartbeat" + utils.COMMAND_DELIMITER)
+
+                # If the device server requests the hashes for the contact info on the current device,
+                # return a list of the hashes for each currently synced contact's info.
+                elif server_command == 'check_contact_info_hashes':
+                    syncing.Contacts.send_contact_info_hashes(self.__directory, bluetooth_socket)
+                    self.__logger.info(f"Sent contact info hashes to device: {self.__name} ({self.__address})!")
+
+                # If the device server requests the hashes for the contact photos on the current device,
+                # return a list of the hashes for each currently synced contact's photo.
+                elif server_command == 'check_contact_photo_hashes':
+                    syncing.Contacts.send_contact_photo_hashes(self.__directory, bluetooth_socket)
+                    self.__logger.info(f"Sent contact photo hashes to device: {self.__name} ({self.__address})!")
+
+                # If the device server requests the ids of the messages on the current device, return a list of
+                # the message ids.
+                elif server_command == 'check_message_ids':
+                    syncing.Messages.send_message_ids(self.__directory, bluetooth_socket)
+                    self.__logger.info(f"Sent message ids to device: {self.__name} ({self.__address})!")
+
+                # If the device server requests the ids of the messages on the current device, return a list of
+                # the message ids.
+                elif server_command == 'check_call_ids':
+                    syncing.Calls.send_call_ids(self.__directory, bluetooth_socket)
+                    self.__logger.info(f"Sent call ids to device: {self.__name} ({self.__address})!")
+
+                # If the server sends the clipboard from the target device, copy it to current device.
+                elif 'incoming_clipboard:' in server_command:
+                    pyclip.copy(server_command[len("incoming_clipboard: "):])
+                    self.__logger.info(f"Copied clipboard from device: {self.__name} ({self.__address})!")
+
+                # If the server sends a contact, try to write it to the database of the current device.
+                elif 'incoming_contact:' in server_command:
+                    contact = server_command[len("incoming_contact: "):]
+                    syncing.Contacts.write_contact_to_database(self.__directory, contact)
+                    self.__logger.info(f"Wrote contact: {json.loads(contact)['mName']} from device: "
+                                       f"{self.__name} ({self.__address}) to contacts!")
+
+                # If the server sends part of a contact photo, write it to the contact photo buffer, or write it
+                # to the database if it is complete.
+                elif 'incoming_contact_photo_part:' in server_command:
+                    self.handle_incoming_photo_part_command(server_command)
+
+                # If the server sends an sms message, write it to the database.
+                elif 'incoming_message:' in server_command:
+                    message = server_command[len("incoming_message: "):]
+                    syncing.Messages.write_message_to_database(self.__directory, message)
+                    self.__logger.info(f"Wrote message with id: {json.loads(message)['mId']} from device: "
+                                       f"{self.__name} ({self.__address}) to messages!")
+
+                # If the server sends a call, write it to the database.
+                elif 'incoming_call:' in server_command:
+                    call = server_command[len("incoming_call: "):]
+                    syncing.Calls.write_call_to_database(self.__directory, call)
+                    self.__logger.info(f"Wrote call with id: {json.loads(call)['mId']} from device: "
+                                       f"{self.__name} ({self.__address}) to calls!")
+
+                # If the server tells the current device to delete a currently synced contact, delete it.
+                elif 'delete_contact:' in server_command:
+                    contact_id = int(server_command[len('delete_contact: '):])
+                    syncing.Contacts.delete_contact_from_database(self.__directory, contact_id)
+                    self.__logger.info(f"Deleted entries for contact id: {contact_id} from contacts!")
+
+                # If the server tells the current device to delete a currently synced message, delete it.
+                elif 'delete_message:' in server_command:
+                    call_id = int(server_command[len('delete_message: '):])
+                    syncing.Messages.delete_message_from_database(self.__directory, call_id)
+                    self.__logger.info(f"Deleted entries for message id: {call_id} from messages!")
+
+                # If the server tells the current device to delete a currently synced message, delete it.
+                elif 'delete_call:' in server_command:
+                    call_id = int(server_command[len('delete_call: '):])
+                    syncing.Calls.delete_call_from_database(self.__directory, call_id)
+                    self.__logger.info(f"Deleted entries for call id: {call_id} from calls!")
+
+        except bluetooth.btcommon.BluetoothError:
             self.__logger.exception("Error receiving incoming command from server!")
+            time.sleep(1)
 
     def handle_incoming_photo_part_command(self, server_command):
         """Takes in server commands pertaining to the syncing of contact photos and either writes them
         to the contact photo buffer, or to the database in the case of completion"""
 
-        # The part of the command that isn't the command itself.
-        extra_part = server_command.replace("incoming_contact_photo_part: ", "")
-        contact_id = extra_part.split(' | ')[0]  # The contact id the photo belongs to.
-        data_part = extra_part.split(' | ')[1]  # The part of the command that contains the data for the photo.
+        command_data = server_command[len("incoming_contact_photo_part: "):]
+        contact_id = command_data.split(' | ')[0]  # The contact id the photo belongs to.
+        data_segment = command_data.split(' | ')[1]  # The part of the command that contains the data for the photo.
 
-        # If START is in the data part, create an entry in the contact photo buffer containing
+        # If START is in the data segment, create an entry in the contact photo buffer containing
         # the contact id and photo hash
-        if 'START' in data_part:
+        if 'START' in data_segment:
             if contact_id not in self.__contact_photo_buffer.keys():
                 self.__contact_photo_buffer[contact_id] = {}
-                self.__contact_photo_buffer[contact_id]['base64'] = []
+                self.__contact_photo_buffer[contact_id]['base64'] = ""
                 self.__contact_photo_buffer[contact_id]['contact_id'] = contact_id
-                self.__contact_photo_buffer[contact_id]['hash'] = int(data_part.replace("START ", ""))
+                self.__contact_photo_buffer[contact_id]['hash'] = int(data_segment[len("START "):])
 
         # If a new piece of data came in for the contact photo, append it to the appropriate entry in the photo
         # buffer.
-        elif data_part != 'END':
-            self.__contact_photo_buffer[contact_id]['base64'].append(data_part)
+        elif data_segment != 'END':
+            self.__contact_photo_buffer[contact_id]['base64'] += data_segment
             logging.debug(f"Wrote part of contact photo for contact id: {contact_id} from device:"
                           f" {self.__name} ({self.__address}) to photo buffer!")
 
         # If the END of the photo data is reached, combine the data in the photo buffer into one large
-        # byte variable and write it to the database.
+        # bytes object and write it to the database.
         else:
-            photo_64_bytes = bytes(''.join(self.__contact_photo_buffer[contact_id]['base64']), 'utf-8')
+            photo_64_bytes = bytes(self.__contact_photo_buffer[contact_id]['base64'], 'utf-8')
             self.__contact_photo_buffer[contact_id]['base64'] = photo_64_bytes
 
             logging.info(f"Writing contact photo for contact id: {contact_id} from device:"
                          f" {self.__name} ({self.__address}) to contacts...")
             threading.Thread(target=syncing.Contacts.write_contact_photo_to_database,
-                             args=(self.__directory, self.__contact_photo_buffer[contact_id], self.__logger)).start()
+                             args=(self.__directory, self.__contact_photo_buffer[contact_id])).start()
 
             # Pop the entry in the photo buffer so it isn't just hanging around in memory when it's finished.
             self.__contact_photo_buffer.pop(contact_id)
-
-    def sync_thread_alive(self):
-        return self.__sync_thread.isAlive()
-
-    def stop_thread(self):
-        self.__sync_thread.do_run = False
 
     def check_socket_timing(self, bluetooth_socket):
         """Checks the timing for the bluetooth socket connection and handles the connection accordingly."""
@@ -221,6 +243,12 @@ class Phone:
             logging.info(f"Bluetooth socket disconnected for device: {self.__name} ({self.__address})!")
 
         return bluetooth_socket
+
+    def sync_thread_alive(self):
+        return self.__sync_thread.isAlive()
+
+    def stop_thread(self):
+        self.__sync_thread.do_run = False
 
     def get_name(self):
         return self.__name

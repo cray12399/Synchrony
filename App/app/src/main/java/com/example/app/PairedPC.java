@@ -26,7 +26,7 @@ public class PairedPC {
     private boolean connectAutomatically = true;
 
     // Tracks the last time the PC was synced.
-    private transient Date mLastSync;
+    private Date mLastSync;
 
     // Bluetooth connection variables.
     private transient boolean mSocketConnected = false;
