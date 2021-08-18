@@ -26,7 +26,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  */
 public class Utils {
     // Action and Key variables.
-    public static final String CONNECT_CHANGED_ACTION = "connectChangedAction";
+    public static final String CONNECTION_CHANGED_ACTION = "connectChangedAction";
     public static final String RECIPIENT_ADDRESS_KEY = "recipientAddressKey";
 
     // Logging tag variables.
@@ -211,9 +211,9 @@ public class Utils {
         sForegroundRunning = foregroundRunning;
     }
 
-    public static void broadcastConnectChange(Context applicationContext, String pcAddress) {
+    public static void broadcastConnectionChange(Context applicationContext, String pcAddress) {
         Intent connectChangedIntent = new Intent();
-        connectChangedIntent.setAction(Utils.CONNECT_CHANGED_ACTION);
+        connectChangedIntent.setAction(Utils.CONNECTION_CHANGED_ACTION);
         connectChangedIntent.putExtra(Utils.RECIPIENT_ADDRESS_KEY, pcAddress);
         applicationContext.sendBroadcast(connectChangedIntent);
     }

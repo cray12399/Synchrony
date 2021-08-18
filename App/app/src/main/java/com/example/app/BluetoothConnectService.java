@@ -26,18 +26,20 @@ import java.util.Objects;
  * BluetoothConnectionThreads for Paired PC's
  */
 public class BluetoothConnectService extends Service {
-    // Logging tag variables
     private static final String TAG = "BluetoothConnectService";
 
-    // Receiver variable
     private BroadcastReceiver mBluetoothConnectReceiver;
 
-    // Main thread for the service.
     private PCListenerThread mPCListenerThread;
+
+    // Constant used to tell MainActivity to add a PC to PCRecView.
+    public static final String ADD_TO_MAIN_ACTIVITY_ACTION = "addToPCList";
+
+    // Constant used to access PC address that needs to be added to PCRecView.
+    public static final String ADDED_PC_KEY = "addedPCKey";
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        // Summary notification which holds notifications for BluetoothConnectionThreads
         String CONNECTED_PC_GROUP = "connectedPCS";
         NotificationCompat.Builder summaryNotificationBuilder =
                 new NotificationCompat.Builder(this,
@@ -53,7 +55,10 @@ public class BluetoothConnectService extends Service {
         startForeground(summaryNotificationID, summaryNotificationBuilder.build());
         Log.d(TAG, "onStartCommand: BluetoothConnectService started in the foreground!");
 
-        searchForCompatibleDevices();
+        for (BluetoothDevice bluetoothDevice :
+                BluetoothAdapter.getDefaultAdapter().getBondedDevices()) {
+            handleConnectionStatus(bluetoothDevice);
+        }
 
         Utils.setForegroundRunning(true);
 
@@ -65,17 +70,7 @@ public class BluetoothConnectService extends Service {
         return START_STICKY_COMPATIBILITY;
     }
 
-    /**
-     * Search for all compatible bonded devices and add them to pairedPCS. Then,
-     * populate the pcRecViewAdapter in MainActivity.
-     */
-    private void searchForCompatibleDevices() {
-        // Iterate all bonded bluetooth devices to find compatible PC's
-        for (BluetoothDevice bluetoothDevice :
-                BluetoothAdapter.getDefaultAdapter().getBondedDevices()) {
-            String deviceTag = String.format("%s (%s)", bluetoothDevice.getName(),
-                    bluetoothDevice.getAddress());
-
+    private void handleConnectionStatus(BluetoothDevice bluetoothDevice) {
             // If a device is not in pairedPCS, try to add it.
             if (!Utils.inPairedPCS(bluetoothDevice.getAddress())) {
                 Utils.addToPairedPCS(bluetoothDevice);
@@ -85,7 +80,7 @@ public class BluetoothConnectService extends Service {
             if (Utils.isConnected(bluetoothDevice.getAddress()) &&
                     Utils.inPairedPCS(bluetoothDevice.getAddress())) {
                 // Add it to the MainActivity
-                MainActivity.addToMainActivity(this, bluetoothDevice);
+                addToMainActivity(this, bluetoothDevice);
 
                 // If the paired PC is set to connect automatically, automatically start connecting.
                 if (Objects.requireNonNull(
@@ -93,18 +88,12 @@ public class BluetoothConnectService extends Service {
                         .isConnectingAutomatically()) {
                     Objects.requireNonNull(Utils.getPairedPC(bluetoothDevice.getAddress()))
                             .setConnecting(true);
-                    Log.d(TAG, String.format("searchForCompatibleDevices: " +
-                            "Automatically connecting device: %s!", deviceTag));
 
-                    // Notify the MainActivity that it is connecting.
-                    Utils.broadcastConnectChange(getApplicationContext(),
+                    // Notify the rest of the app that it is connecting.
+                    Utils.broadcastConnectionChange(getApplicationContext(),
                             bluetoothDevice.getAddress());
-                    Log.d(TAG, String.format("searchForCompatibleDevices: " +
-                                    "Notified main activity of connecting status for device: %s!",
-                            deviceTag));
                 }
             }
-        }
     }
 
     private void registerReceiver() {
@@ -115,27 +104,7 @@ public class BluetoothConnectService extends Service {
                     case BluetoothDevice.ACTION_ACL_CONNECTED: {
                         BluetoothDevice bluetoothDevice = intent
                                 .getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-                        // If a newly connected device is not in pairedPCS, see if it is
-                        // compatible and add it.
-                        if (!Utils.inPairedPCS(bluetoothDevice.getAddress())) {
-                            Utils.addToPairedPCS(bluetoothDevice);
-                        }
-
-                        // If the device is in pairedPCS, add it to pcRecView in MainActivity.
-                        if (Utils.inPairedPCS(bluetoothDevice.getAddress())) {
-                            MainActivity.addToMainActivity(getApplicationContext(),
-                                    bluetoothDevice);
-                        }
-
-                        // If the PC is set to connect automatically, then connect it automatically.
-                        if (Objects.requireNonNull(Utils.getPairedPC(bluetoothDevice.getAddress()))
-                                .isConnectingAutomatically()) {
-                            Objects.requireNonNull(Utils.getPairedPC(bluetoothDevice.getAddress()))
-                                    .setConnecting(true);
-
-                            Utils.broadcastConnectChange(getApplicationContext(),
-                                    bluetoothDevice.getAddress());
-                        }
+                        handleConnectionStatus(bluetoothDevice);
                         break;
                     }
 
@@ -153,20 +122,22 @@ public class BluetoothConnectService extends Service {
 
                         stopConnection(bluetoothDevice);
 
-                        Utils.broadcastConnectChange(getApplicationContext(),
+                        Utils.broadcastConnectionChange(getApplicationContext(),
                                 bluetoothDevice.getAddress());
                         break;
                     }
 
                     // If a PC has been marked as no longer connecting, stop connection.
-                    case Utils.CONNECT_CHANGED_ACTION: {
-                        String pcAddress = intent.getStringExtra(Utils.RECIPIENT_ADDRESS_KEY);
-                        if (!Objects.requireNonNull(Utils.getPairedPC(pcAddress)).isConnecting()) {
+                    case Utils.CONNECTION_CHANGED_ACTION: {
+                        String recipientAddress =
+                                intent.getStringExtra(Utils.RECIPIENT_ADDRESS_KEY);
+                        if (!Objects.requireNonNull(
+                                Utils.getPairedPC(recipientAddress)).isConnecting()) {
                             BluetoothAdapter bluetoothAdapter = BluetoothAdapter
                                     .getDefaultAdapter();
-                            for (BluetoothDevice bluetoothDevice : bluetoothAdapter
-                                    .getBondedDevices()) {
-                                if (bluetoothDevice.getAddress().equals(pcAddress)) {
+                            for (BluetoothDevice bluetoothDevice :
+                                    bluetoothAdapter.getBondedDevices()) {
+                                if (bluetoothDevice.getAddress().equals(recipientAddress)) {
                                     stopConnection(bluetoothDevice);
                                     break;
                                 }
@@ -195,7 +166,7 @@ public class BluetoothConnectService extends Service {
 
         IntentFilter filter = new IntentFilter();
         filter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED);
-        filter.addAction(Utils.CONNECT_CHANGED_ACTION);
+        filter.addAction(Utils.CONNECTION_CHANGED_ACTION);
         filter.addAction(BluetoothDevice.ACTION_ACL_CONNECTED);
         filter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED);
         getApplicationContext().registerReceiver(mBluetoothConnectReceiver, filter);
@@ -256,6 +227,17 @@ public class BluetoothConnectService extends Service {
 
         String deviceTag = String.format("%s (%s)", connectedSocketName, connectedSocketAddress);
         Log.d(TAG, String.format("startConnection: Connection started for device: %s!", deviceTag));
+    }
+
+    /**
+     * Static method that allows other classes tell the MainActivity to add a PC to pcRecView.
+     */
+    public void addToMainActivity(Context context, BluetoothDevice bluetoothDevice) {
+        Intent addToMainActivityIntent = new Intent();
+        addToMainActivityIntent.setAction(ADD_TO_MAIN_ACTIVITY_ACTION);
+        addToMainActivityIntent.putExtra(ADDED_PC_KEY,
+                bluetoothDevice.getAddress());
+        context.getApplicationContext().sendBroadcast(addToMainActivityIntent);
     }
 
     @Override

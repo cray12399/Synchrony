@@ -31,10 +31,6 @@ import java.util.ArrayList;
  * lists all of the PairedPCs for the user to interact with.
  */
 public class MainActivity extends AppCompatActivity {
-    // Action variables.
-    public static final String ADD_TO_PC_LIST = "addToPCList";
-    public static final String ADDED_PC_KEY = "addedPCKey";
-
     // Logging tag variables.
     private static final String TAG = "MainActivity";
 
@@ -48,18 +44,6 @@ public class MainActivity extends AppCompatActivity {
     private RelativeLayout mUnpairedLayout;
     private PCRecViewAdapter mPCRecViewAdapter;
     private Snackbar mBTDisconnectedSnackBar;
-
-    /**
-     * Static method that allows other classes tell the MainActivity to add a PC to pcRecView.
-     */
-    public static void addToMainActivity(Context context,
-                                         BluetoothDevice bluetoothDevice) {
-        Intent addToMainActivityIntent = new Intent();
-        addToMainActivityIntent.setAction(MainActivity.ADD_TO_PC_LIST);
-        addToMainActivityIntent.putExtra(MainActivity.ADDED_PC_KEY,
-                bluetoothDevice.getAddress());
-        context.getApplicationContext().sendBroadcast(addToMainActivityIntent);
-    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -149,7 +133,7 @@ public class MainActivity extends AppCompatActivity {
 
                 if (!listed && Utils.isConnected(pairedPC.getAddress())) {
                     mListedPCS.add(pairedPC);
-                    mPCRecViewAdapter.notifyDataSetChanged();
+                    mPCRecViewAdapter.notifyItemInserted(mListedPCS.size() - 1);
                     Log.d(TAG, String.format("initializePCListing: " +
                             "Added to pcRecView: Device: %s", deviceTag));
                 }
@@ -187,8 +171,9 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onReceive(Context context, Intent intent) {
                 switch (intent.getAction()) {
-                    case ADD_TO_PC_LIST: {
-                        String pcAddress = intent.getStringExtra(ADDED_PC_KEY);
+                    case BluetoothConnectService.ADD_TO_MAIN_ACTIVITY_ACTION: {
+                        String pcAddress = intent.getStringExtra(
+                                BluetoothConnectService.ADDED_PC_KEY);
                         addToPcRecViewAdapter(pcAddress);
                     }
                     case BluetoothAdapter.ACTION_STATE_CHANGED:
@@ -226,7 +211,7 @@ public class MainActivity extends AppCompatActivity {
         };
 
         IntentFilter filter = new IntentFilter();
-        filter.addAction(ADD_TO_PC_LIST);
+        filter.addAction(BluetoothConnectService.ADD_TO_MAIN_ACTIVITY_ACTION);
         filter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED);
         filter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED);
         getApplicationContext().registerReceiver(mainActivityReceiver, filter);
@@ -234,7 +219,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void addToPcRecViewAdapter(String pcAddress) {
         mListedPCS.add(Utils.getPairedPC(pcAddress));
-        mPCRecViewAdapter.notifyDataSetChanged();
+        mPCRecViewAdapter.notifyItemInserted(mListedPCS.size() - 1);
         mUnpairedLayout.setVisibility(View.GONE);
         mPCListLayout.setVisibility(View.VISIBLE);
     }

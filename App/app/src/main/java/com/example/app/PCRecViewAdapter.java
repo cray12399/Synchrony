@@ -67,7 +67,7 @@ public class PCRecViewAdapter extends RecyclerView.Adapter<PCRecViewAdapter.View
         // Set the pcActiveSwitch to toggle the Paired PC's connect status.
         holder.pcConnectingSwitch.setChecked(mListedPCS.get(position).isConnecting());
         holder.pcConnectingSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            Utils.broadcastConnectChange(mContext.getApplicationContext(), listedPC.getAddress());
+            Utils.broadcastConnectionChange(mContext.getApplicationContext(), listedPC.getAddress());
 
             Objects.requireNonNull(
                     Utils.getPairedPC(listedPC.getAddress())).setConnecting(isChecked);
@@ -84,7 +84,7 @@ public class PCRecViewAdapter extends RecyclerView.Adapter<PCRecViewAdapter.View
         holder.connectReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
-                if (intent.getAction().equals(Utils.CONNECT_CHANGED_ACTION)) {
+                if (intent.getAction().equals(Utils.CONNECTION_CHANGED_ACTION)) {
                     if (intent.getStringExtra(Utils.RECIPIENT_ADDRESS_KEY)
                             .equals(listedPC.getAddress())) {
                         holder.pcConnectingSwitch.setChecked(Objects.requireNonNull(
@@ -95,7 +95,7 @@ public class PCRecViewAdapter extends RecyclerView.Adapter<PCRecViewAdapter.View
         };
 
         IntentFilter filter = new IntentFilter();
-        filter.addAction(Utils.CONNECT_CHANGED_ACTION);
+        filter.addAction(Utils.CONNECTION_CHANGED_ACTION);
         mContext.getApplicationContext().registerReceiver(holder.connectReceiver, filter);
     }
 

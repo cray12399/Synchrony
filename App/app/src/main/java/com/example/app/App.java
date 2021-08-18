@@ -12,7 +12,7 @@ public class App extends android.app.Application {
     // Notification channel ID's.
     public static final String connectedDevicesChannelID = "connected_devices";
     public static final String DISCONNECTED_DEVICES_CHANNEL_ID = "disconnected_devices";
-    // Logging tag variable.
+
     private static final String TAG = "App";
 
     @Override
@@ -21,7 +21,6 @@ public class App extends android.app.Application {
 
         Utils.initValues(this);
 
-        // Create notification channels
         createConnectedPCNotificationChannel();
         createDisconnectedPCNotificationChannel();
     }
