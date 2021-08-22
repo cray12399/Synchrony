@@ -1,4 +1,4 @@
-package com.example.app;
+package sync.synchrony.Synchrony;
 
 import android.Manifest;
 import android.bluetooth.BluetoothSocket;
@@ -19,11 +19,8 @@ import androidx.core.content.PermissionChecker;
 import com.google.common.base.Splitter;
 import com.google.gson.Gson;
 
-import org.checkerframework.checker.units.qual.A;
-
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Calendar;
@@ -401,7 +398,7 @@ public class Syncer extends Thread {
                                         + phoneContact.getPhotoHash()));
                         SystemClock.sleep(100);
                         // Then, iterate over the photo's parts and send them to the client.
-                        for (String photoPart : phoneContact.getmPhoto()) {
+                        for (String photoPart : phoneContact.getPhoto()) {
                             BluetoothConnectionThread.sendCommand(mBluetoothSocket,
                                     ("incoming_contact_photo_part: "
                                             + phoneContact.getPrimaryKey()
@@ -795,7 +792,7 @@ public class Syncer extends Thread {
             this.mPhoto = Splitter.fixedLength(768).split(encodedPhoto);
         }
 
-        public Iterable<String> getmPhoto() {
+        public Iterable<String> getPhoto() {
             return mPhoto;
         }
 

@@ -1,4 +1,4 @@
-package com.example.app;
+package sync.synchrony.Synchrony;
 
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
@@ -22,6 +22,7 @@ import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.example.Synchrony.R;
 import com.google.android.material.snackbar.Snackbar;
 
 import java.util.ArrayList;

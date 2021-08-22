@@ -1,4 +1,4 @@
-package com.example.app;
+package sync.synchrony.Synchrony;
 
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothClass;
@@ -8,6 +8,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.util.Log;
 
+import com.example.Synchrony.R;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 

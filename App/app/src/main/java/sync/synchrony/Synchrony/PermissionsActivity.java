@@ -1,4 +1,4 @@
-package com.example.app;
+package sync.synchrony.Synchrony;
 
 import android.Manifest;
 import android.app.AlertDialog;
@@ -12,11 +12,12 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.SwitchCompat;
-import androidx.core.app.NotificationManagerCompat;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.PermissionChecker;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+
+import com.example.Synchrony.R;
 
 import java.io.Serializable;
 import java.util.ArrayList;

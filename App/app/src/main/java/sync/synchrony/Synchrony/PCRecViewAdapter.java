@@ -1,4 +1,4 @@
-package com.example.app;
+package sync.synchrony.Synchrony;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -15,6 +15,7 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.widget.SwitchCompat;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.example.Synchrony.R;
 import com.google.android.material.card.MaterialCardView;
 
 import java.util.ArrayList;

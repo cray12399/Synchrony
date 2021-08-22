@@ -159,6 +159,10 @@ class Phone:
                     self.__logger.info(f"Wrote call with id: {json.loads(call)['mId']} from device: "
                                        f"{self.__name} ({self.__address}) to calls!")
 
+                elif 'incoming_notification:' in server_command:
+                    notification = server_command[len("incoming_notification: "):]
+                    syncing.notify_pc(notification)
+
                 # If the server tells the current device to delete a currently synced contact, delete it.
                 elif 'delete_contact:' in server_command:
                     contact_id = int(server_command[len('delete_contact: '):])

@@ -1,6 +1,6 @@
-package com.example.app;
+package sync.synchrony.Synchrony;
 
-import static com.example.app.App.connectedDevicesChannelID;
+import static sync.synchrony.Synchrony.App.connectedDevicesChannelID;
 
 import android.app.PendingIntent;
 import android.app.TaskStackBuilder;
@@ -18,6 +18,7 @@ import android.widget.Toast;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 
+import com.example.Synchrony.R;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
@@ -51,7 +52,13 @@ class BluetoothConnectionThread extends Thread {
 
     // Constant used by BluetoothConnectionThread's notification to stop the
     // connection from the notification.
-    private static final String STOP_CONNECTION_ACTION = "stopConnectionAction";
+    private static final String sStopConnectionAction = "stopConnectionAction";
+
+    // Constant used to receive new notification info from NotificationListener.
+    public static final String NEW_NOTIFICATION_ACTION = "newNotificationAction";
+
+    // Constant used to get value of new notification from NotificationListener.
+    public static final String NEW_NOTIFICATION_KEY = "newNotificationKey";
 
     // Bluetooth timing variables. Timing used to track connection status.
     private long mSocketConnectedTime = -1;
@@ -190,7 +197,7 @@ class BluetoothConnectionThread extends Thread {
                         }
 
                         // If the user opts to stop the connection via the thread's notification.
-                        case STOP_CONNECTION_ACTION: {
+                        case sStopConnectionAction: {
                             Log.d(TAG, String.format("onReceive: " +
                                     "Stopping connection for device: %s...", mDeviceTag));
 
@@ -217,9 +224,19 @@ class BluetoothConnectionThread extends Thread {
                     }
                 } else {
                     switch (intent.getAction()) {
-                        case (Telephony.Sms.Intents.SMS_RECEIVED_ACTION): {
+                        case Telephony.Sms.Intents.SMS_RECEIVED_ACTION: {
                             startSync(Syncer.SYNC_MESSAGES);
                             break;
+                        }
+
+                        case NEW_NOTIFICATION_ACTION: {
+                            boolean socketConnected = Objects.requireNonNull(
+                                    Utils.getPairedPC(mDevice.getAddress())).isSocketConnected();
+                            if (socketConnected) {
+                                String notification = intent.getStringExtra(NEW_NOTIFICATION_KEY);
+                                sendCommand(mBluetoothSocket,
+                                        "incoming_notification: " + notification);
+                            }
                         }
                     }
                 }
@@ -228,9 +245,10 @@ class BluetoothConnectionThread extends Thread {
 
         IntentFilter filter = new IntentFilter();
         filter.addAction(PCDetailsActivity.SEND_CLIPBOARD_ACTION);
-        filter.addAction(STOP_CONNECTION_ACTION);
+        filter.addAction(sStopConnectionAction);
         filter.addAction(PCDetailsActivity.START_SYNC_ACTION);
         filter.addAction(Telephony.Sms.Intents.SMS_RECEIVED_ACTION);
+        filter.addAction(NEW_NOTIFICATION_ACTION);
         mContext.getApplicationContext()
                 .registerReceiver(mBluetoothConnectionThreadReceiver, filter);
     }
@@ -267,7 +285,7 @@ class BluetoothConnectionThread extends Thread {
         // This intent is used to allow the user to set the PC as non-connecting
         // from the notification
         Intent stopConnectionIntent = new Intent();
-        stopConnectionIntent.setAction(STOP_CONNECTION_ACTION);
+        stopConnectionIntent.setAction(sStopConnectionAction);
         stopConnectionIntent.putExtra(Utils.RECIPIENT_ADDRESS_KEY, mDevice.getAddress());
         PendingIntent stopConnectionPendingIntent = PendingIntent.getBroadcast(
                 mContext.getApplicationContext(), mNotificationID, stopConnectionIntent, 0);

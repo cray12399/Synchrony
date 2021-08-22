@@ -1,4 +1,4 @@
-package com.example.app;
+package sync.synchrony.Synchrony;
 
 import android.app.NotificationChannel;
 import android.app.NotificationManager;

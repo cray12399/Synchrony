@@ -1,4 +1,4 @@
-package com.example.app;
+package sync.synchrony.Synchrony;
 
 import android.content.BroadcastReceiver;
 import android.content.ClipData;
@@ -15,6 +15,8 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.SwitchCompat;
+
+import com.example.Synchrony.R;
 
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;

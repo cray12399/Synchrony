@@ -288,3 +288,21 @@ class Calls:
 
         connection.commit()
         cursor.close()
+
+
+def notify_pc(notification):
+    notification = json.loads(notification)
+
+    if 'appName' in notification.keys():
+        title = notification['appName']
+
+        if notification['title'] is not None:
+            title += ': ' + notification['title']
+    elif notification['title'] is not None:
+        title = notification['title']
+    else:
+        title = "No Title"
+
+    text = "No Description" if notification['text'] is None else str(notification['text'])
+
+    os.system(f"notify-send \"{title}\" \"{text}\"")

@@ -1,6 +1,4 @@
-package com.example.app;
-
-import static com.example.app.App.connectedDevicesChannelID;
+package sync.synchrony.Synchrony;
 
 import android.app.Service;
 import android.bluetooth.BluetoothAdapter;
@@ -17,6 +15,8 @@ import android.util.Log;
 
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
+
+import com.example.Synchrony.R;
 
 import java.io.IOException;
 import java.util.Objects;
@@ -43,7 +43,7 @@ public class BluetoothConnectService extends Service {
         String CONNECTED_PC_GROUP = "connectedPCS";
         NotificationCompat.Builder summaryNotificationBuilder =
                 new NotificationCompat.Builder(this,
-                        connectedDevicesChannelID)
+                        App.connectedDevicesChannelID)
                         .setSmallIcon(R.drawable.ic_placeholder_logo)
                         .setContentTitle("Connect Service Background")
                         .setGroup(CONNECTED_PC_GROUP)
