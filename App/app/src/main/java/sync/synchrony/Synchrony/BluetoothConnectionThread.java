@@ -4,7 +4,9 @@ import static sync.synchrony.Synchrony.App.connectedDevicesChannelID;
 
 import android.app.PendingIntent;
 import android.app.TaskStackBuilder;
+import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothServerSocket;
 import android.bluetooth.BluetoothSocket;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -29,6 +31,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Objects;
+import java.util.UUID;
 
 /**
  * Thread manages the connections for all paired PC's.
@@ -48,7 +51,7 @@ class BluetoothConnectionThread extends Thread {
 
     // Constant used to notify the rest of the app that mBluetoothSocket
     // was connected or disconnected.
-    public static final String SOCKET_CONNECTION_CHANGE_ACTION = "socketConnectionChangeAction";
+    public static final String SYNC_SOCKET_CONNECTION_CHANGE_ACTION = "socketConnectionChangeAction";
 
     // Constant used by BluetoothConnectionThread's notification to stop the
     // connection from the notification.
@@ -60,10 +63,8 @@ class BluetoothConnectionThread extends Thread {
     // Constant used to get value of new notification from NotificationListener.
     public static final String NEW_NOTIFICATION_KEY = "newNotificationKey";
 
-    // Bluetooth timing variables. Timing used to track connection status.
-    private long mSocketConnectedTime = -1;
+    // Heartbeat timing variable. Timing used to track connection status.
     private long mLastServerHeartBeat = -1;
-    private long mLastClientHeartBeat = -1;
 
     // Syncer object used to sync information to the client device in the background.
     private Syncer mSyncer;
@@ -82,83 +83,18 @@ class BluetoothConnectionThread extends Thread {
         registerBluetoothConnectionThreadReceiver();
     }
 
-    /**
-     * Method used to receive commands from client.
-     */
-
-    public String receiveCommand() {
-        BluetoothDevice device = mBluetoothSocket.getRemoteDevice();
-        final String deviceTag = String.format("%s (%s)", device.getName(), device.getAddress());
-
-        try {
-            // If there are bytes in the input stream, try to receive them.
-            InputStream inputStream = mBluetoothSocket.getInputStream();
-            if (inputStream.available() > 0) {
-                int available = inputStream.available();
-                byte[] bytes = new byte[available];
-                int bytesRead = inputStream.read(bytes);
-                Log.d(TAG, String.format("receiveCommand: " +
-                                "%d bytes successfully received from client for device: %s!",
-                        bytesRead, deviceTag));
-
-                // Update heartbeat since a regular command is equivalent to a heartbeat.
-                mLastClientHeartBeat = System.currentTimeMillis();
-
-                return new String(bytes);
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-            Log.e(TAG, String.format("receiveCommand: " +
-                            "Error receiving incoming bytes from client for device: %s!",
-                    deviceTag), e);
-            return "Receive Failure";
-        }
-
-        return null;
-    }
-
-    /**
-     * Method used to send commands to the client. Static so that Syncer can use it.
-     */
-    public static void sendCommand(BluetoothSocket bluetoothSocket, String stringCommand) {
-        BluetoothDevice device = bluetoothSocket.getRemoteDevice();
-        final String deviceTag = String.format("%s (%s)", device.getName(), device.getAddress());
-
-        try {
-            byte[] command = (stringCommand + Utils.COMMAND_DELIMITER).getBytes();
-            OutputStream outputStream = bluetoothSocket.getOutputStream();
-            outputStream.write(command);
-
-            Log.d(TAG, String.format("sendCommand: " +
-                            "Successfully sent command to client for device: %s: %s!",
-                    deviceTag, new String(command)));
-        } catch (IOException e) {
-            Log.e(TAG, String.format("sendCommand: " +
-                    "Couldn't send command to client for device: %s!", deviceTag), e);
-        }
-    }
-
-    private void broadcastSocketConnectionChange(boolean socketConnected) {
-        Objects.requireNonNull(
-                Utils.getPairedPC(mDevice.getAddress())).setSocketConnected(socketConnected);
-
-        Intent socketConnectedIntent = new Intent();
-        socketConnectedIntent.setAction(SOCKET_CONNECTION_CHANGE_ACTION);
-        socketConnectedIntent.putExtra(Utils.RECIPIENT_ADDRESS_KEY, mDevice.getAddress());
-        mContext.getApplicationContext().sendBroadcast(socketConnectedIntent);
-    }
     @Override
     public void run() {
-        // Since the socketConnected field is transient, the thread needs to
-        // set it as true so it isn't null.
-        broadcastSocketConnectionChange(true);
-
-        mSocketConnectedTime = System.currentTimeMillis();
+        broadcastSyncSocketConnectionChange(true);
 
         createNotification();
 
         while (!interrupted()) {
-            manageConnectedSocket();
+            manageConnectedSyncSocket();
+
+            if (!Objects.requireNonNull(Utils.getPairedPC(mDevice.getAddress())).isConnecting()) {
+                break;
+            }
         }
 
         if (mSyncer != null && mSyncer.isAlive()) {
@@ -175,6 +111,65 @@ class BluetoothConnectionThread extends Thread {
         Log.d(TAG, String.format("run: Stopped connection thread for device %s!", mDeviceTag));
     }
 
+    public String receiveCommand() {
+        BluetoothDevice device = mBluetoothSocket.getRemoteDevice();
+        final String deviceTag = String.format("%s (%s)", device.getName(), device.getAddress());
+
+        try {
+            InputStream inputStream = mBluetoothSocket.getInputStream();
+            if (inputStream.available() > 0) {
+                int available = inputStream.available();
+                byte[] bytes = new byte[available];
+                int bytesRead = inputStream.read(bytes);
+                Log.d(TAG, String.format("receiveCommand: " +
+                                "%d bytes successfully received from client for device: %s!",
+                        bytesRead, deviceTag));
+
+                return new String(bytes);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+            Log.e(TAG, String.format("receiveCommand: " +
+                            "Error receiving incoming bytes from client for device: %s!",
+                    deviceTag), e);
+            return "Receive Failure";
+        }
+
+        return null;
+    }
+
+    public static boolean sendCommand(BluetoothSocket bluetoothSocket, String stringCommand) {
+        BluetoothDevice device = bluetoothSocket.getRemoteDevice();
+        final String deviceTag = String.format("%s (%s)", device.getName(), device.getAddress());
+
+        try {
+            byte[] command = (stringCommand + Utils.COMMAND_DELIMITER).getBytes();
+            OutputStream outputStream = bluetoothSocket.getOutputStream();
+            outputStream.write(command);
+
+            Log.d(TAG, String.format("sendCommand: " +
+                            "Successfully sent command to client for device: %s: %s!",
+                    deviceTag, new String(command)));
+
+            return true;
+        } catch (IOException e) {
+            Log.e(TAG, String.format("sendCommand: " +
+                    "Couldn't send command to client for device: %s!", deviceTag), e);
+
+            return false;
+        }
+    }
+
+    private void broadcastSyncSocketConnectionChange(boolean socketConnected) {
+        Objects.requireNonNull(
+                Utils.getPairedPC(mDevice.getAddress())).setSyncSocketConnected(socketConnected);
+
+        Intent syncSocketConnectionIntent = new Intent();
+        syncSocketConnectionIntent.setAction(SYNC_SOCKET_CONNECTION_CHANGE_ACTION);
+        syncSocketConnectionIntent.putExtra(Utils.RECIPIENT_ADDRESS_KEY, mDevice.getAddress());
+        mContext.getApplicationContext().sendBroadcast(syncSocketConnectionIntent);
+    }
+
     private void registerBluetoothConnectionThreadReceiver() {
         mBluetoothConnectionThreadReceiver = new BroadcastReceiver() {
             @Override
@@ -182,7 +177,6 @@ class BluetoothConnectionThread extends Thread {
                 String broadcastRecipient = intent.getStringExtra(Utils.RECIPIENT_ADDRESS_KEY);
                 if (broadcastRecipient != null && broadcastRecipient.equals(mDevice.getAddress())) {
                     switch (intent.getAction()) {
-                        // If the user sent their clipboard from the PCDetailActivity.
                         case PCDetailsActivity.SEND_CLIPBOARD_ACTION: {
                             String clipboard = intent.getStringExtra(
                                     PCDetailsActivity.CLIPBOARD_KEY);
@@ -190,33 +184,25 @@ class BluetoothConnectionThread extends Thread {
                             sendCommand(mBluetoothSocket,
                                     String.format("incoming_clipboard: %s", clipboard));
 
-                            Toast.makeText(mContext,
+                            Toast.makeText(mContext.getApplicationContext(),
                                     String.format("Clipboard sent to %s!", mDevice.getName()),
                                     Toast.LENGTH_SHORT).show();
                             break;
                         }
 
-                        // If the user opts to stop the connection via the thread's notification.
                         case sStopConnectionAction: {
-                            Log.d(TAG, String.format("onReceive: " +
-                                    "Stopping connection for device: %s...", mDeviceTag));
-
-                            // Cancel the notification.
                             NotificationManagerCompat notificationManager =
                                     NotificationManagerCompat.from(context);
                             notificationManager.cancel(mDevice.getAddress(), mNotificationID);
 
-                            // Set the PC as non-connecting
                             Objects.requireNonNull(Utils.getPairedPC(
                                     mDevice.getAddress())).setConnecting(false);
 
-                            // Broadcast connection change to MainActivity.
                             Utils.broadcastConnectionChange(mContext.getApplicationContext(),
                                     mDevice.getAddress());
                             break;
                         }
 
-                        // If the user chooses to sync the device manually.
                         case PCDetailsActivity.START_SYNC_ACTION: {
                             startSync(Syncer.SYNC_ALL);
                             break;
@@ -231,7 +217,7 @@ class BluetoothConnectionThread extends Thread {
 
                         case NEW_NOTIFICATION_ACTION: {
                             boolean socketConnected = Objects.requireNonNull(
-                                    Utils.getPairedPC(mDevice.getAddress())).isSocketConnected();
+                                    Utils.getPairedPC(mDevice.getAddress())).isSyncSocketConnected();
                             if (socketConnected) {
                                 String notification = intent.getStringExtra(NEW_NOTIFICATION_KEY);
                                 sendCommand(mBluetoothSocket,
@@ -245,8 +231,8 @@ class BluetoothConnectionThread extends Thread {
 
         IntentFilter filter = new IntentFilter();
         filter.addAction(PCDetailsActivity.SEND_CLIPBOARD_ACTION);
-        filter.addAction(sStopConnectionAction);
         filter.addAction(PCDetailsActivity.START_SYNC_ACTION);
+        filter.addAction(sStopConnectionAction);
         filter.addAction(Telephony.Sms.Intents.SMS_RECEIVED_ACTION);
         filter.addAction(NEW_NOTIFICATION_ACTION);
         mContext.getApplicationContext()
@@ -268,12 +254,12 @@ class BluetoothConnectionThread extends Thread {
         if (mBluetoothSocket != null) {
             try {
                 mBluetoothSocket.close();
-                broadcastSocketConnectionChange(false);
+                broadcastSyncSocketConnectionChange(false);
                 Log.d(TAG, String.format("closeSockets: " +
-                        "Bluetooth socket closed for device: %s!", mDeviceTag));
+                        "Bluetooth sync socket closed for device: %s!", mDeviceTag));
             } catch (IOException e) {
                 Log.e(TAG, String.format("closeSockets: " +
-                        "Error closing bluetooth socket thread for device: %s!", mDeviceTag), e);
+                        "Error closing bluetooth sync socket for device: %s!", mDeviceTag), e);
             }
         }
     }
@@ -332,7 +318,7 @@ class BluetoothConnectionThread extends Thread {
                 mSyncer.setClientContactHashes(clientContacts);
             }
 
-            // If the client sends a list of its currently synced photos, pass them to the syncer.
+        // If the client sends a list of its currently synced photos, pass them to the syncer.
         } else if (clientCommand.contains("have_contact_photo_hashes:")) {
             if (mSyncer != null) {
                 Gson gson = new Gson();
@@ -342,6 +328,7 @@ class BluetoothConnectionThread extends Thread {
                 mSyncer.setClientContactPhotoHashes(clientPhotos);
             }
 
+        // If the client sends a list of its currently synced messages, pass them to the syncer.
         } else if (clientCommand.contains("have_message_ids:")) {
             if (mSyncer != null) {
                 Gson gson = new Gson();
@@ -350,6 +337,8 @@ class BluetoothConnectionThread extends Thread {
                         new TypeToken<ArrayList<Long>>() {}.getType());
                 mSyncer.setClientMessageIDs(clientMessageIDs);
             }
+
+        // If the client sends a list of its currently synced calls, pass them to the syncer.
         }  else if (clientCommand.contains("have_call_ids:")) {
             if (mSyncer != null) {
                 Gson gson = new Gson();
@@ -368,34 +357,11 @@ class BluetoothConnectionThread extends Thread {
 
         if (mLastServerHeartBeat == -1 ||
                 System.currentTimeMillis() - mLastServerHeartBeat > SEND_HEARTBEAT_TIMING) {
-            sendCommand(mBluetoothSocket, "server_heartbeat");
-
-            mLastServerHeartBeat = System.currentTimeMillis();
-        }
-    }
-
-    public void checkHeartbeatTiming() {
-        if (mLastServerHeartBeat != -1) {
-            final long socketTimeout = 10000;
-            // If the client has already sent a heartbeat.
-            if (mLastClientHeartBeat != -1) {
-                // If the difference between the last server heartbeat time and the last
-                // client heart beat time is more than 10 seconds, assume the socket
-                // connection is closed.
-                if (mLastServerHeartBeat - mLastClientHeartBeat > socketTimeout) {
-                    interrupt();
-                    Log.d(TAG, "manageConnectedSocket: " +
-                            "No response from client. Socket connection timeout.");
-                }
-
-                // If the client hasn't sent a heart beat, check the connection against the initial
-                // connection time. If it is greater than 10 seconds, assume the socket
-                // connection is closed.
-            } else if (System.currentTimeMillis() - mSocketConnectedTime > socketTimeout) {
-                Log.d(TAG, "manageConnectedSocket: " +
-                        "No initial response from client. Socket connection timeout.");
+            if (!sendCommand(mBluetoothSocket, "server_heartbeat")) {
                 interrupt();
             }
+
+            mLastServerHeartBeat = System.currentTimeMillis();
         }
     }
 
@@ -403,7 +369,7 @@ class BluetoothConnectionThread extends Thread {
      * Main function which manages the PC's connection. Handles client command
      * and tracks the connection status using heartbeats
      */
-    private void manageConnectedSocket() {
+    private void manageConnectedSyncSocket() {
         String incomingCommands = receiveCommand();
         if (incomingCommands != null) {
             String[] clientCommands = incomingCommands.split(Utils.COMMAND_DELIMITER);
@@ -431,7 +397,6 @@ class BluetoothConnectionThread extends Thread {
         }
 
         sendHeartbeat();
-        checkHeartbeatTiming();
 
         // Sleep the thread so it isn't draining the phone's resources.
         SystemClock.sleep(500);

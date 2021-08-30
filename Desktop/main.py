@@ -1,14 +1,16 @@
 import logging
 import os
 import sys
+import subprocess
 import time
+import utils
 from configparser import ConfigParser
 from datetime import datetime
 
 import bluetooth
 import pydbus
 
-from Phone import Phone
+from phone import Phone
 
 
 def initialize_logging():
@@ -32,13 +34,6 @@ def initialize_logging():
     return logging.getLogger()
 
 
-def initialize_config(logger):
-    config = ConfigParser()
-
-    with open('main_config.ini', 'w') as config_file:
-        config.write(config_file)
-
-
 def initialize_directory(logger):
     """Initializes the program's main directory with key folders."""
 
@@ -47,6 +42,9 @@ def initialize_directory(logger):
     if not os.path.isdir("Phones/"):
         os.mkdir("Phones/")
         logger.debug(f"Successfully created directory: {os.path.abspath}/Phones/!")
+
+    if not os.path.isfile('app_config.ini'):
+        utils.initialize_app_config()
 
     logger.info("Directory successfully initialized!")
 

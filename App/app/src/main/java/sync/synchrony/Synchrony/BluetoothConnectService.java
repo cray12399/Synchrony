@@ -20,6 +20,7 @@ import com.example.Synchrony.R;
 
 import java.io.IOException;
 import java.util.Objects;
+import java.util.UUID;
 
 /**
  * Service class manages all of the background connection activity. Assigns
@@ -127,25 +128,6 @@ public class BluetoothConnectService extends Service {
                         break;
                     }
 
-                    // If a PC has been marked as no longer connecting, stop connection.
-                    case Utils.CONNECTION_CHANGED_ACTION: {
-                        String recipientAddress =
-                                intent.getStringExtra(Utils.RECIPIENT_ADDRESS_KEY);
-                        if (!Objects.requireNonNull(
-                                Utils.getPairedPC(recipientAddress)).isConnecting()) {
-                            BluetoothAdapter bluetoothAdapter = BluetoothAdapter
-                                    .getDefaultAdapter();
-                            for (BluetoothDevice bluetoothDevice :
-                                    bluetoothAdapter.getBondedDevices()) {
-                                if (bluetoothDevice.getAddress().equals(recipientAddress)) {
-                                    stopConnection(bluetoothDevice);
-                                    break;
-                                }
-                            }
-                        }
-                        break;
-                    }
-
                     // If bluetooth is disabled, stop all connection threads.
                     case BluetoothAdapter.ACTION_STATE_CHANGED:
                         Log.d(TAG, "onReceive: " +
@@ -187,7 +169,6 @@ public class BluetoothConnectService extends Service {
                 bluetoothConnectionThread.interrupt();
             }
 
-            // Mark PC as no longer connecting.
             Objects.requireNonNull(Utils.getPairedPC(deviceAddress)).setConnecting(false);
 
             String deviceTag = String.format("%s (%s)", deviceName, deviceAddress);
@@ -222,7 +203,6 @@ public class BluetoothConnectService extends Service {
             }
         }
 
-        // Mark the PC as connecting.
         Objects.requireNonNull(Utils.getPairedPC(connectedSocketAddress)).setConnecting(true);
 
         String deviceTag = String.format("%s (%s)", connectedSocketName, connectedSocketAddress);
@@ -242,8 +222,6 @@ public class BluetoothConnectService extends Service {
 
     @Override
     public void onDestroy() {
-        // If this service is destroyed, cancel all the current BluetoothConnectionThreads
-        // and stop the foreground service.
         Log.d(TAG, "onDestroy: " +
                 "BluetoothConnectService destroyed! Stopping BluetoothConnected threads.");
         for (BluetoothConnectionThread bluetoothConnectionThread :
@@ -334,15 +312,12 @@ public class BluetoothConnectService extends Service {
             try {
                 BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
 
-                Log.d(TAG, "getBluetoothServerSocket: " +
-                        "Creating bluetooth server socket for device connections.");
                 tmp = bluetoothAdapter.listenUsingRfcommWithServiceRecord(
-                        mContext.getString(R.string.app_name), Utils.getUuid());
+                        mContext.getString(R.string.app_name), UUID.randomUUID());
                 Log.d(TAG, "getBluetoothServerSocket: " +
                         "Created bluetooth server socket for device connections!");
 
             } catch (IOException e) {
-                // Timeout in case of failure to create BluetoothServerSocket.
                 SystemClock.sleep(5000);
             }
             mBluetoothServerSocket = tmp;

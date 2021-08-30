@@ -72,11 +72,11 @@ public class PairedPC {
         this.connectAutomatically = connectAutomatically;
     }
 
-    public boolean isSocketConnected() {
+    public boolean isSyncSocketConnected() {
         return mSocketConnected;
     }
 
-    public void setSocketConnected(boolean mSocketConnected) {
+    public void setSyncSocketConnected(boolean mSocketConnected) {
         this.mSocketConnected = mSocketConnected;
     }
 

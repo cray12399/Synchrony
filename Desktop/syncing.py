@@ -1,6 +1,8 @@
 import json
 import os
 import sqlite3
+from configparser import ConfigParser
+import base64
 
 import utils
 
@@ -102,10 +104,14 @@ class Contacts:
         cursor.execute("SELECT * FROM contact_photos WHERE contact_id = ?", (contact_photo['contact_id'],))
         if len(cursor.fetchall()) == 0:
             cursor.execute("INSERT INTO contact_photos VALUES (?, ?, ?)",
-                           (contact_photo['base64'], contact_photo['hash'], contact_photo['contact_id']))
+                           (contact_photo['base64'],
+                            contact_photo['hash'],
+                            contact_photo['contact_id']))
         else:
             cursor.execute("UPDATE contact_photos SET base64 = ?, photo_hash = ? WHERE contact_id = ?",
-                           (contact_photo['base64'], contact_photo['hash'], contact_photo['contact_id']))
+                           (contact_photo['base64'],
+                            contact_photo['hash'],
+                            contact_photo['contact_id']))
 
         connection.commit()
         cursor.close()
@@ -290,7 +296,15 @@ class Calls:
         cursor.close()
 
 
-def notify_pc(notification):
+def write_file(file_name, file_bytes):
+    if not os.path.isfile('app_config.ini'):
+        utils.initialize_app_config()
+
+    with open(f"{utils.get_file_transfer_path()}/{file_name}", 'wb') as file:
+        file.write(base64.decodebytes(bytes(file_bytes, 'utf-8')))
+
+
+def desktop_notify(notification):
     notification = json.loads(notification)
 
     if 'appName' in notification.keys():

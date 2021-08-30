@@ -1,23 +1,32 @@
 package sync.synchrony.Synchrony;
 
+import android.app.Activity;
 import android.content.BroadcastReceiver;
 import android.content.ClipData;
 import android.content.ClipboardManager;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.database.Cursor;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.SystemClock;
+import android.provider.OpenableColumns;
 import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.SwitchCompat;
+import androidx.core.content.FileProvider;
 
 import com.example.Synchrony.R;
 
+import java.io.File;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -39,6 +48,10 @@ public class PCDetailsActivity extends AppCompatActivity {
 
     // Constant used to obtain clipboard text from PCDetailsActivity.
     public static final String CLIPBOARD_KEY = "clipboardKey";
+
+    public static final String FILE_URI_KEY = "fileUriKey";
+
+    public static final String FILE_NAME_KEY = "fileNameKey";
 
     // Associated PairedPC variable.
     private PairedPC mPairedPC;
@@ -81,12 +94,11 @@ public class PCDetailsActivity extends AppCompatActivity {
                             }
                         }
 
-                        case BluetoothConnectionThread.SOCKET_CONNECTION_CHANGE_ACTION: {
+                        case BluetoothConnectionThread.SYNC_SOCKET_CONNECTION_CHANGE_ACTION: {
                             mPairedPC = Utils.getPairedPC(recipientAddress);
                             mSyncBtn.setEnabled(Objects.requireNonNull(mPairedPC)
-                                    .isSocketConnected());
-                            mSendClipboardBtn.setEnabled(mPairedPC.isSocketConnected());
-                            mSendFileBtn.setEnabled(mPairedPC.isSocketConnected());
+                                    .isSyncSocketConnected());
+                            mSendClipboardBtn.setEnabled(mPairedPC.isSyncSocketConnected());
                             break;
                         }
 
@@ -98,7 +110,7 @@ public class PCDetailsActivity extends AppCompatActivity {
                             }
 
                             if (!Objects.requireNonNull(mPairedPC)
-                                    .isSocketConnected()) {
+                                    .isSyncSocketConnected()) {
                                 mSyncBtn.setEnabled(false);
                             } else {
                                 mSyncBtn.setEnabled(!currentlySyncing);
@@ -111,7 +123,7 @@ public class PCDetailsActivity extends AppCompatActivity {
 
         IntentFilter filter = new IntentFilter();
         filter.addAction(Utils.CONNECTION_CHANGED_ACTION);
-        filter.addAction(BluetoothConnectionThread.SOCKET_CONNECTION_CHANGE_ACTION);
+        filter.addAction(BluetoothConnectionThread.SYNC_SOCKET_CONNECTION_CHANGE_ACTION);
         filter.addAction(Syncer.SYNC_ACTIVITY_CHANGE_ACTION);
         getApplicationContext().registerReceiver(mainActivityReceiver, filter);
     }
@@ -128,6 +140,14 @@ public class PCDetailsActivity extends AppCompatActivity {
         } else {
             pcSyncText.setText("Never");
         }
+    }
+
+    public static void broadcastClipboard(Context context, String pcAddress, String clipboard) {
+        Intent sendClipboardIntent = new Intent();
+        sendClipboardIntent.setAction(SEND_CLIPBOARD_ACTION);
+        sendClipboardIntent.putExtra(Utils.RECIPIENT_ADDRESS_KEY, pcAddress);
+        sendClipboardIntent.putExtra(CLIPBOARD_KEY, clipboard);
+        context.sendBroadcast(sendClipboardIntent);
     }
 
     private void initializeUi() {
@@ -190,6 +210,7 @@ public class PCDetailsActivity extends AppCompatActivity {
                 Utils.setPCConnectingAutomatically(mPairedPC.getAddress(), isChecked));
 
         initializeSendClipboardBtn();
+        initializeSendFileBtn();
 
         // Set sync button to start sync with paired pc.
         mSyncBtn = findViewById(R.id.syncButton);
@@ -197,16 +218,12 @@ public class PCDetailsActivity extends AppCompatActivity {
                 startSync(this, mPairedPC.getAddress()));
         boolean currentlySyncing = Objects.requireNonNull(
                 Utils.getPairedPC(mPairedPC.getAddress())).isCurrentlySyncing();
-        mSyncBtn.setEnabled(mPairedPC.isSocketConnected() && !currentlySyncing);
-
-        mSendFileBtn = findViewById(R.id.sendFileButton);
-        mSendFileBtn.setEnabled(mPairedPC.isSocketConnected());
+        mSyncBtn.setEnabled(mPairedPC.isSyncSocketConnected() && !currentlySyncing);
 
         setLastSyncText(mPairedPC.getAddress());
     }
 
     private void initializeSendClipboardBtn() {
-        // Button is used to copy the user's clipboard and send it to the client PC.
         mSendClipboardBtn = findViewById(R.id.sendClipboardBtn);
         mSendClipboardBtn.setOnClickListener(v -> {
             String clipboard = null;
@@ -222,21 +239,48 @@ public class PCDetailsActivity extends AppCompatActivity {
                 }
 
                 if (clipboard != null) {
-                    sendClipboard(this, mPairedPC.getAddress(), clipboard);
+                    broadcastClipboard(this, mPairedPC.getAddress(), clipboard);
                 }
             } else {
                 Toast.makeText(this, "Clipboard is empty!", Toast.LENGTH_SHORT).show();
             }
         });
-        mSendClipboardBtn.setEnabled(mPairedPC.isSocketConnected());
+        mSendClipboardBtn.setEnabled(mPairedPC.isSyncSocketConnected());
     }
 
-    public static void sendClipboard(Context context, String pcAddress, String clipboard) {
-        Intent sendClipboardIntent = new Intent();
-        sendClipboardIntent.setAction(SEND_CLIPBOARD_ACTION);
-        sendClipboardIntent.putExtra(Utils.RECIPIENT_ADDRESS_KEY, pcAddress);
-        sendClipboardIntent.putExtra(CLIPBOARD_KEY, clipboard);
-        context.sendBroadcast(sendClipboardIntent);
+    public void initializeSendFileBtn() {
+        ActivityResultLauncher<Intent> sendFileActivityResultsLauncher =
+                this.registerForActivityResult(
+                        new ActivityResultContracts.StartActivityForResult(), result -> {
+                            if (result.getResultCode() == Activity.RESULT_OK) {
+                                if (result.getData() != null) {
+                                    Thread fileSendThread = new Thread(() -> {
+                                        Uri fileUri = result.getData().getData();
+                                        Intent intent = new Intent();
+                                        intent.setAction(Intent.ACTION_SEND);
+                                        intent.setComponent(new ComponentName(
+                                                "com.android.bluetooth",
+                                                "com.android.bluetooth.opp." +
+                                                        "BluetoothOppLauncherActivity"));
+                                        intent.setType("*/*");
+                                        intent.putExtra(Intent.EXTRA_STREAM, fileUri);
+                                        startActivity(intent);
+                                    });
+                                    fileSendThread.start();
+                                }
+                            }
+                        }
+                );
+
+        mSendFileBtn = findViewById(R.id.sendFileButton);
+        mSendFileBtn.setOnClickListener(v -> {
+            Intent chooseFileIntent = new Intent(Intent.ACTION_GET_CONTENT);
+            chooseFileIntent.setType("*/*");
+            chooseFileIntent = Intent.createChooser(chooseFileIntent, "Choose a file to send");
+
+            sendFileActivityResultsLauncher.launch(chooseFileIntent);
+        });
+
     }
 
     public static void startSync(Context context, String pcAddress) {
