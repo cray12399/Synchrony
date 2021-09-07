@@ -11,6 +11,8 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.IBinder;
 import android.os.SystemClock;
+import android.telephony.PhoneStateListener;
+import android.telephony.TelephonyManager;
 import android.util.Log;
 
 import androidx.annotation.Nullable;
@@ -68,7 +70,15 @@ public class BluetoothConnectService extends Service {
 
         registerReceiver();
 
+        initializePhoneStateListener();
+
         return START_STICKY_COMPATIBILITY;
+    }
+
+    private void initializePhoneStateListener() {
+        TelephoneStateListener phoneStateListener = new TelephoneStateListener(this);
+        TelephonyManager telephonyManager = (TelephonyManager) getSystemService(TELEPHONY_SERVICE);
+        telephonyManager.listen(phoneStateListener, PhoneStateListener.LISTEN_CALL_STATE);
     }
 
     private void handleConnectionStatus(BluetoothDevice bluetoothDevice) {

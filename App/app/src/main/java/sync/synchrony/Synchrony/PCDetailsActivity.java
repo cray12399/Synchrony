@@ -49,10 +49,6 @@ public class PCDetailsActivity extends AppCompatActivity {
     // Constant used to obtain clipboard text from PCDetailsActivity.
     public static final String CLIPBOARD_KEY = "clipboardKey";
 
-    public static final String FILE_URI_KEY = "fileUriKey";
-
-    public static final String FILE_NAME_KEY = "fileNameKey";
-
     // Associated PairedPC variable.
     private PairedPC mPairedPC;
 
@@ -99,6 +95,7 @@ public class PCDetailsActivity extends AppCompatActivity {
                             mSyncBtn.setEnabled(Objects.requireNonNull(mPairedPC)
                                     .isSyncSocketConnected());
                             mSendClipboardBtn.setEnabled(mPairedPC.isSyncSocketConnected());
+                            mSendFileBtn.setEnabled(mPairedPC.isSyncSocketConnected());
                             break;
                         }
 
@@ -256,15 +253,26 @@ public class PCDetailsActivity extends AppCompatActivity {
                                 if (result.getData() != null) {
                                     Thread fileSendThread = new Thread(() -> {
                                         Uri fileUri = result.getData().getData();
+
+                                        Cursor cursor = getContentResolver().query(fileUri,
+                                                null, null,
+                                                null, null);
+                                        int nameIndex = cursor.getColumnIndex(
+                                                OpenableColumns.DISPLAY_NAME);
+                                        cursor.moveToFirst();
+                                        String fileName = cursor.getString(nameIndex);
+                                        cursor.close();
+
                                         Intent intent = new Intent();
                                         intent.setAction(Intent.ACTION_SEND);
                                         intent.setComponent(new ComponentName(
                                                 "com.android.bluetooth",
-                                                "com.android.bluetooth.opp." +
-                                                        "BluetoothOppLauncherActivity"));
+                                                "com.android.bluetooth.opp.BluetoothOppLauncherActivity"));
                                         intent.setType("*/*");
+                                        File file = new File(fileUri.getPath());
                                         intent.putExtra(Intent.EXTRA_STREAM, fileUri);
                                         startActivity(intent);
+
                                     });
                                     fileSendThread.start();
                                 }
@@ -273,6 +281,7 @@ public class PCDetailsActivity extends AppCompatActivity {
                 );
 
         mSendFileBtn = findViewById(R.id.sendFileButton);
+        mSendFileBtn.setEnabled(mPairedPC.isSyncSocketConnected());
         mSendFileBtn.setOnClickListener(v -> {
             Intent chooseFileIntent = new Intent(Intent.ACTION_GET_CONTENT);
             chooseFileIntent.setType("*/*");
@@ -282,6 +291,18 @@ public class PCDetailsActivity extends AppCompatActivity {
         });
 
     }
+
+//    public void initializeSendFileBtn() {
+//        mSendFileBtn = findViewById(R.id.sendFileButton);
+//        mSendFileBtn.setEnabled(mPairedPC.isSyncSocketConnected());
+//        mSendFileBtn.setOnClickListener(v -> {
+//            Uri imageUri = FileProvider.getUriForFile(
+//                    this,
+//                    "com.example.homefolder.example.provider", //(use your app signature + ".provider" )
+//                    imageFile);
+//        });
+//
+//    }
 
     public static void startSync(Context context, String pcAddress) {
         Intent doSyncIntent = new Intent();

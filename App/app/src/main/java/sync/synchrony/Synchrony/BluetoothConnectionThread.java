@@ -14,7 +14,9 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.SystemClock;
 import android.provider.Telephony;
+import android.telephony.TelephonyManager;
 import android.util.Log;
+import android.widget.Switch;
 import android.widget.Toast;
 
 import androidx.core.app.NotificationCompat;
@@ -224,6 +226,23 @@ class BluetoothConnectionThread extends Thread {
                                         "incoming_notification: " + notification);
                             }
                         }
+
+                        case TelephoneStateListener.PHONE_STATE_CHANGED_ACTION: {
+                            int state = intent.getIntExtra(TelephoneStateListener.PHONE_STATE_KEY,
+                                    -1);
+
+                            switch (state) {
+                                case TelephonyManager.CALL_STATE_RINGING:
+                                    System.out.println("RINGING!!!!!!!!!!!!");
+                                    break;
+                                case TelephonyManager.CALL_STATE_OFFHOOK:
+                                    System.out.println("OFFHOOK!!!!!!!!!!!!!!!");
+                                    break;
+                                case TelephonyManager.CALL_STATE_IDLE:
+                                    System.out.println("IDLE!!!!!!!!!!!!");
+                                    break;
+                            }
+                        }
                     }
                 }
             }
@@ -235,6 +254,7 @@ class BluetoothConnectionThread extends Thread {
         filter.addAction(sStopConnectionAction);
         filter.addAction(Telephony.Sms.Intents.SMS_RECEIVED_ACTION);
         filter.addAction(NEW_NOTIFICATION_ACTION);
+        filter.addAction(TelephoneStateListener.PHONE_STATE_CHANGED_ACTION);
         mContext.getApplicationContext()
                 .registerReceiver(mBluetoothConnectionThreadReceiver, filter);
     }

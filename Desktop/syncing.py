@@ -296,14 +296,6 @@ class Calls:
         cursor.close()
 
 
-def write_file(file_name, file_bytes):
-    if not os.path.isfile('app_config.ini'):
-        utils.initialize_app_config()
-
-    with open(f"{utils.get_file_transfer_path()}/{file_name}", 'wb') as file:
-        file.write(base64.decodebytes(bytes(file_bytes, 'utf-8')))
-
-
 def desktop_notify(notification):
     notification = json.loads(notification)
 
