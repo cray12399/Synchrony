@@ -2,140 +2,235 @@ import QtQuick 2.14
 import QtQuick.Window 2.14
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.11
-import "buttons"
-import "customWidgets"
-import "pages"
+import Qt.labs.settings 1.0
+
+import "."
+import "Buttons"
+import "CustomWidgets"
+import "Pages"
 
 Window {
-    property int activePage: 1
+    property int activePage: 0
 
-    id: window
-    width: 800
-    height: 500
+    id: mainWindow
     visible: true
-    title: qsTr("Synchrony")
+    width: 600
+    height: 400
+    title: "Synchrony"
+
+    Settings {
+        property alias x: mainWindow.x
+        property alias y: mainWindow.y
+        property alias width: mainWindow.width
+        property alias height: mainWindow.height
+    }
+
+    SystemPalette {
+        id: systemPalette
+        colorGroup: SystemPalette.Active
+    }
 
     Rectangle {
-        id: topBarBg
-        height: 58
-        color: "#0054ff"
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.top: parent.top
-        anchors.topMargin: 0
-        anchors.leftMargin: 0
-        anchors.rightMargin: 0
+        id: background
+        anchors.fill: parent
+        color: Style.background
+    }
 
-        RowLayout {
-            id: topBarBtnLayout
-            width: parent.height * 3
-            anchors.left: parent.left
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
-            spacing: 5
-            anchors.leftMargin: 15
-            anchors.topMargin: 10
-            anchors.bottomMargin: 5
+    ColumnLayout {
+        id: mainLayout
+        anchors.fill: parent
 
-            PageBtn {
-                Layout.fillHeight: true
-                Layout.fillWidth: true
-                btnIconSource: "images/icons/settings.svg"
-                page: 0
-                active: activePage === page
+        Rectangle {
+            id: topBar
+            width: 200
+            height: 45
+            color: Style.primaryVariant
+            Layout.minimumWidth: 40
+            Layout.preferredHeight: 45
+            Layout.fillWidth: true
+            Layout.alignment: Qt.AlignLeft | Qt.AlignTop
 
-                onClicked: {
-                    if (activePage != page) {
-                        activePage = page
+            PhoneSelector {
+                id: phoneSelector
+                width: topBar.width * .3
+                anchors.right: syncRow.left
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                anchors.rightMargin: 10
+                anchors.topMargin: 10
+                anchors.bottomMargin: 10
+                listHeight: mainWindow.height - topBar.height
+                itemBgColor: Style.primaryVariant
+                itemTextColor: Style.colorOnPrimary
+                comboBgColor: Style.colorOnPrimary
+                downArrowColor: Style.primary
+            }
+
+            Row {
+                id: pageRow
+                anchors.left: parent.left
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                spacing: 5
+                anchors.leftMargin: 15
+                anchors.topMargin: 5
+                anchors.bottomMargin: 5
+
+                IconButton {
+                    property int pageIndex: 0
+
+                    id: settingsBtn
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    anchors.bottomMargin: 0
+                    anchors.topMargin: 0
+                    width: height
+                    iconSource: "Images/icons/settings.svg"
+                    bgVisible: false
+                    iconColor: activePage == pageIndex ? Style.colorOnPrimary : Style.inactivePage
+
+                    Behavior on rotation {
+                        PropertyAnimation {
+                            id: settingsBtnPropertyAnimation
+                            duration: 500
+                            easing {type: Easing.InOutBounce}
+                    }}
+
+                    onClicked: {
+                        if (!settingsBtnPropertyAnimation.running) {
+                            if (activePage != pageIndex) {
+                                settingsBtn.rotation += 360
+                            }
+                            activePage = pageIndex
+                        }
+                    }
+                }
+
+                IconButton {
+                    property int pageIndex: 1
+
+                    id: conversationsBtn
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    anchors.bottomMargin: 0
+                    anchors.topMargin: 0
+                    bgVisible: false
+                    width: height
+                    iconSource: "Images/icons/conversations.svg"
+                    iconColor: activePage == pageIndex ? Style.colorOnPrimary : Style.inactivePage
+
+                    onClicked: {
+                        activePage = pageIndex
+                    }
+                }
+
+                IconButton {
+                    property int pageIndex: 2
+
+                    id: callsBtn
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    anchors.topMargin: 0
+                    anchors.bottomMargin: 0
+                    bgVisible: false
+                    width: height
+                    iconSource: "Images/icons/dialer.svg"
+                    iconColor: activePage == pageIndex ? Style.colorOnPrimary : Style.inactivePage
+
+                    onClicked: {
+                        activePage = pageIndex
                     }
                 }
             }
 
-            PageBtn {
-                btnNumNewContent: 10
-                Layout.fillHeight: true
-                Layout.fillWidth: true
-                btnIconSource: "images/icons/conversations.svg"
-                page: 1
-                active: activePage === page
+            Row {
+                id: syncRow
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                anchors.topMargin: 5
+                anchors.bottomMargin: 5
+                anchors.rightMargin: 15
 
-                onClicked: {
-                    if (activePage != page) {
-                        activePage = page
+                IconButton {
+                    id: sendFileBtn
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    anchors.topMargin: 0
+                    anchors.bottomMargin: 0
+                    bgVisible: false
+                    width: height
+                    iconSource: "Images/icons/send_file.svg"
+                    iconColor: Style.colorOnPrimary
+
+                    onClicked: {
+                        backend.sendFile(phoneSelector.currentText)
+                    }
+                }
+
+                IconButton {
+                    id: syncClipboardBtn
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    anchors.topMargin: 0
+                    anchors.bottomMargin: 0
+                    bgVisible: false
+                    width: height
+                    iconSource: "Images/icons/sync_clipboard.svg"
+                    iconColor: Style.colorOnPrimary
+
+                    onClicked: {
+                        backend.sendClipboard(phoneSelector.currentText)
+                    }
+                }
+
+                IconButton {
+                    id: syncBtn
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    anchors.topMargin: 0
+                    anchors.bottomMargin: 0
+                    bgVisible: false
+                    width: height
+                    iconSource: "Images/icons/sync.svg"
+                    iconColor: Style.colorOnPrimary
+
+                    Behavior on rotation {
+                        PropertyAnimation {
+                            id: syncBtnPropertyAnimation
+                            duration: 400
+                            easing {}
+                    }}
+
+                    onClicked: {
+                        if (!syncBtnPropertyAnimation.running) {
+                            syncBtn.rotation += 360
+                        }
+
+                        backend.doSync(phoneSelector.currentText)
                     }
                 }
             }
 
-            PageBtn {
-                btnNumNewContent: 100
-                Layout.fillHeight: true
-                Layout.fillWidth: true
-                btnIconSource: "images/icons/dialer.svg"
-                page: 2
-                active: activePage === page
-
-                onClicked: {
-                    if (activePage != page) {
-                        activePage = page
-                    }
-                }
-            }
-
-            PageBtn {
-                btnNumNewContent: 1
-                Layout.fillHeight: true
-                Layout.fillWidth: true
-                btnIconSource: "images/icons/sync.svg"
-                page: 3
-                active: activePage === page
-
-                onClicked: {
-                    if (activePage != page) {
-                        activePage = page
-                    }
-                }
-            }
-        }
-
-        PhoneSelectionBox {
-            id: phoneSelectionBox
-            width: parent.width * .4
-            anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
-            anchors.bottomMargin: 14
-            anchors.topMargin: 14
-            anchors.rightMargin: 15
 
         }
     }
 
-    StackLayout {
-        id: pageStack
-        currentIndex: activePage
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.top: topBarBg.bottom
-        anchors.bottom: parent.bottom
-        anchors.topMargin: 0
+    Connections {
+        target: backend
 
-        Rectangle {
-            anchors.fill: parent
-            color: "green"
-        }
-
-        ConversationsPage {
-
-        }
-
-        Rectangle {
-            anchors.fill: parent
-            color: "black"
-        }
-
-        Rectangle {
-            anchors.fill: parent
-            color: "red"
+        function onSetPhones(phones) {
+            phoneSelector.model = phones
         }
     }
 }
+
+
+
+
+
+/*##^##
+Designer {
+    D{i:0;formeditorZoom:0.9}
+}
+##^##*/

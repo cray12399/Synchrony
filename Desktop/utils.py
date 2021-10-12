@@ -1,3 +1,4 @@
+import datetime
 from configparser import ConfigParser
 import subprocess
 
@@ -5,7 +6,7 @@ import subprocess
 
 # CONSTANTS
 SERVER_PORT = 8
-SOCKET_TIMEOUT = 10
+SOCKET_TIMEOUT = 1
 COMMAND_DELIMITER = '``;'
 BASE_DIR = ''
 
