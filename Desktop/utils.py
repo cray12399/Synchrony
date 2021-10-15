@@ -6,6 +6,7 @@ import subprocess
 
 # CONSTANTS
 SERVER_PORT = 8
+LOGS_TO_KEEP = 20
 SOCKET_TIMEOUT = 1
 COMMAND_DELIMITER = '``;'
 BASE_DIR = ''

@@ -192,6 +192,9 @@ class Phone:
                      f" {self.__name} ({self.__address}) to contacts...")
         syncing.Contacts.write_contact_photo_to_database(self.__directory, contact_photo)
 
+    def get_bluetooth_socket(self):
+        return self.__bluetooth_socket
+
     def sync_thread_alive(self):
         return self.__sync_thread.is_alive()
 

@@ -3,6 +3,7 @@ import QtQuick.Window 2.14
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.11
 import Qt.labs.settings 1.0
+import QtQuick.Dialogs 1.3
 
 import "."
 import "Buttons"
@@ -10,7 +11,7 @@ import "CustomWidgets"
 import "Pages"
 
 Window {
-    property int activePage: 0
+    property int activePage: 1
 
     id: mainWindow
     visible: true
@@ -59,10 +60,10 @@ Window {
                 anchors.rightMargin: 10
                 anchors.topMargin: 10
                 anchors.bottomMargin: 10
-                listHeight: mainWindow.height - topBar.height
+                listHeight: (mainWindow.height * .9) - topBar.height
                 itemBgColor: Style.primaryVariant
                 itemTextColor: Style.colorOnPrimary
-                comboBgColor: Style.colorOnPrimary
+                comboBgColor: count > 0 ? Style.colorOnPrimary : Style.inactive
                 downArrowColor: Style.primary
             }
 
@@ -87,7 +88,7 @@ Window {
                     width: height
                     iconSource: "Images/icons/settings.svg"
                     bgVisible: false
-                    iconColor: activePage == pageIndex ? Style.colorOnPrimary : Style.inactivePage
+                    iconColor: activePage == pageIndex ? Style.colorOnPrimary : Style.inactive
 
                     Behavior on rotation {
                         PropertyAnimation {
@@ -117,7 +118,10 @@ Window {
                     bgVisible: false
                     width: height
                     iconSource: "Images/icons/conversations.svg"
-                    iconColor: activePage == pageIndex ? Style.colorOnPrimary : Style.inactivePage
+                    iconColor: activePage == pageIndex ? Style.colorOnPrimary : Style.inactive
+                    indicatorColor: Style.secondary
+                    indicatorTextColor: Style.colorOnSecondary
+                    numNewContent: 0
 
                     onClicked: {
                         activePage = pageIndex
@@ -135,7 +139,10 @@ Window {
                     bgVisible: false
                     width: height
                     iconSource: "Images/icons/dialer.svg"
-                    iconColor: activePage == pageIndex ? Style.colorOnPrimary : Style.inactivePage
+                    iconColor: activePage == pageIndex ? Style.colorOnPrimary : Style.inactive
+                    indicatorColor: Style.secondary
+                    indicatorTextColor: Style.colorOnSecondary
+                    numNewContent: 0
 
                     onClicked: {
                         activePage = pageIndex
@@ -161,10 +168,11 @@ Window {
                     bgVisible: false
                     width: height
                     iconSource: "Images/icons/send_file.svg"
-                    iconColor: Style.colorOnPrimary
+                    iconColor: phoneSelector.count > 0 ? Style.colorOnPrimary : Style.inactive
+                    enabled: phoneSelector.count > 0
 
                     onClicked: {
-                        backend.sendFile(phoneSelector.currentText)
+                        backend.sendFile(phoneSelector.model[phoneSelector.currentIndex])
                     }
                 }
 
@@ -177,10 +185,11 @@ Window {
                     bgVisible: false
                     width: height
                     iconSource: "Images/icons/sync_clipboard.svg"
-                    iconColor: Style.colorOnPrimary
+                    iconColor: phoneSelector.count > 0 ? Style.colorOnPrimary : Style.inactive
+                    enabled: phoneSelector.count > 0
 
                     onClicked: {
-                        backend.sendClipboard(phoneSelector.currentText)
+                        backend.sendClipboard(phoneSelector.model[phoneSelector.currentIndex])
                     }
                 }
 
@@ -193,7 +202,8 @@ Window {
                     bgVisible: false
                     width: height
                     iconSource: "Images/icons/sync.svg"
-                    iconColor: Style.colorOnPrimary
+                    iconColor: phoneSelector.count > 0 ? Style.colorOnPrimary : Style.inactive
+                    enabled: phoneSelector.count > 0
 
                     Behavior on rotation {
                         PropertyAnimation {
@@ -207,7 +217,7 @@ Window {
                             syncBtn.rotation += 360
                         }
 
-                        backend.doSync(phoneSelector.currentText)
+                        backend.doSync(phoneSelector.model[phoneSelector.currentIndex])
                     }
                 }
             }
@@ -222,6 +232,14 @@ Window {
         function onSetPhones(phones) {
             phoneSelector.model = phones
         }
+
+        function onSetNumNewMessages(numNewMessages) {
+            conversationsBtn.numNewContent = numNewMessages
+        }
+
+        function onSetNumNewCalls(numNewCalls) {
+            callsBtn.numNewContent = numNewCalls
+        }
     }
 }
 
@@ -229,8 +247,4 @@ Window {
 
 
 
-/*##^##
-Designer {
-    D{i:0;formeditorZoom:0.9}
-}
-##^##*/
+

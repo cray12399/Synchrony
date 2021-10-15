@@ -11,11 +11,11 @@ QtObject {
     property color surface: "#424242"
     property color error: "#B00020"
     property color colorOnPrimary: "#FFFFFF"
-    property color colorOnSecondary: "#000000"
+    property color colorOnSecondary: "#FFFFFF"
     property color colorOnBackground: "#000000"
     property color colorOnSurface: "#FFFFFF"
     property color colorOnError: "#FFFFFF"
-    property color inactivePage: "#7962af"
+    property color inactive: "#7962af"
 }
 /*##^##
 Designer {

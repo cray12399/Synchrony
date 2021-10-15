@@ -9,6 +9,8 @@ import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothServerSocket;
 import android.bluetooth.BluetoothSocket;
 import android.content.BroadcastReceiver;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -367,6 +369,16 @@ class BluetoothConnectionThread extends Thread {
                         new TypeToken<ArrayList<Long>>() {}.getType());
                 mSyncer.setClientCallIds(clientCallIDs);
             }
+        } else if (clientCommand.contains("incoming_clipboard:")) {
+            System.out.println(clientCommand);
+
+            ClipboardManager clipboard = (ClipboardManager)
+                    mContext.getSystemService(Context.CLIPBOARD_SERVICE);
+            String clip_text = clientCommand.split(": ")[1];
+            ClipData clip = ClipData.newPlainText("simple_text", clip_text);
+            clipboard.setPrimaryClip(clip);
+        } else if (clientCommand.contains("do_sync")) {
+            startSync(Syncer.SYNC_ALL);
         }
     }
 
