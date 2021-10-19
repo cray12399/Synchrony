@@ -8,13 +8,40 @@ Item {
     property color itemBgColor: "#cccccc"
     property color itemTextColor: "#000000"
     property color downArrowColor: "#FF0000"
-    property var model: []
-    property int count: model.length
-    property int currentIndex: 0
-    property string currentText: model[currentIndex][0]
+    property var model: ListModel {}
+    property int count: 0
+    property int currentIndex: phoneList.currentIndex
+    property string currentText: "No Phones Connected..."
     property bool opened: false
 
     id: phoneSelector
+
+    Connections{
+        target: model
+
+        function onRowsInserted() {
+            if (phoneList.currentIndex < 0) {
+                phoneList.currentIndex = 0
+            }
+            count = model.rowCount()
+            currentText = model.get(currentIndex).name
+        }
+
+        function onRowsRemoved() {
+            count = model.rowCount()
+            if (count !== 0) {
+                if (currentIndex == count) {
+                    phoneList.decrementCurrentIndex()
+                    currentText = model.get(currentIndex).name
+                    opened = opened ? !opened : opened
+                }
+            } else {
+                currentText = "No Phones Connected..."
+                phoneList.currentIndex = 0
+                opened = opened ? !opened : opened
+            }
+        }
+    }
 
     Rectangle {
         id: phoneSelectorBG
@@ -37,7 +64,20 @@ Item {
             }
         }
 
-        onClicked: opened = !opened
+        onFocusChanged: {
+            if (!focus) {
+                opened = false
+            }
+        }
+
+        onClicked: {
+            if (opened) {
+                opened = false
+            } else {
+                opened = true
+                forceActiveFocus()
+            }
+        }
 
         enabled: phoneSelector.count > 0
     }
@@ -50,7 +90,7 @@ Item {
         anchors.rightMargin: 15
         anchors.leftMargin: 15
         color: "black"
-        text: count > 0 ? phoneSelector.currentText : "No Phones Connected..."
+        text: currentText
         elide: Text.ElideRight
     }
 
@@ -84,6 +124,7 @@ Item {
     }
 
     ListView {
+        id: phoneList
         width: parent.width
         anchors.top: parent.bottom
         anchors.topMargin: 15
@@ -93,10 +134,12 @@ Item {
         spacing: 10
         visible: phoneSelector.opened
         clip: true
+        currentIndex: 0
 
         model: parent.model
 
         delegate: ItemDelegate {
+            id: phoneItemDelegate
             width: parent.width
 
             background: Rectangle {
@@ -123,7 +166,8 @@ Item {
                       } else {
                           highlight.visible = false
                           highlight.width = itemBG.width * .75
-                          phoneSelector.currentIndex = index
+                          phoneList.currentIndex = index
+                          phoneSelector.currentText = name
                           phoneSelector.opened = false
                       }
                   }
@@ -131,7 +175,7 @@ Item {
 
             Text {
                 id: itemText
-                text: phoneSelector.model[index][0]
+                text: name
                 anchors.left: parent.left
                 anchors.leftMargin: 15
                 anchors.verticalCenter: itemBG.verticalCenter
@@ -172,6 +216,14 @@ Item {
                       }
                   }
               }
+        }
+    }
+
+    QtObject {
+        id: listModelHandler
+
+        function getItemName(index) {
+            return phoneSelector.model.get(index).name
         }
     }
 

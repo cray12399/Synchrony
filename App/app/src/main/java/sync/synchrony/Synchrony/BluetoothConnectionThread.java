@@ -26,10 +26,13 @@ import androidx.core.app.NotificationManagerCompat;
 
 import com.example.Synchrony.R;
 import com.google.gson.Gson;
+import com.google.gson.JsonSyntaxException;
 import com.google.gson.reflect.TypeToken;
 
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Date;
@@ -118,18 +121,17 @@ class BluetoothConnectionThread extends Thread {
     public String receiveCommand() {
         BluetoothDevice device = mBluetoothSocket.getRemoteDevice();
         final String deviceTag = String.format("%s (%s)", device.getName(), device.getAddress());
+        StringBuilder commandBuilder = new StringBuilder();
+        int bytesRead = 0;
 
         try {
             InputStream inputStream = mBluetoothSocket.getInputStream();
-            if (inputStream.available() > 0) {
+            while (inputStream.available() > 0) {
                 int available = inputStream.available();
-                byte[] bytes = new byte[available];
-                int bytesRead = inputStream.read(bytes);
-                Log.d(TAG, String.format("receiveCommand: " +
-                                "%d bytes successfully received from client for device: %s!",
-                        bytesRead, deviceTag));
+                byte[] bytes = new byte[inputStream.available()];
+                bytesRead += inputStream.read(bytes);
 
-                return new String(bytes);
+                commandBuilder.append(new String(bytes));
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -139,7 +141,14 @@ class BluetoothConnectionThread extends Thread {
             return "Receive Failure";
         }
 
-        return null;
+        if (bytesRead > 0) {
+            Log.d(TAG, String.format("receiveCommand: " +
+                            "%d bytes successfully received from client for device: %s!",
+                    bytesRead, deviceTag));
+            return commandBuilder.toString();
+        } else {
+            return null;
+        }
     }
 
     public static boolean sendCommand(BluetoothSocket bluetoothSocket, String stringCommand) {
@@ -353,11 +362,19 @@ class BluetoothConnectionThread extends Thread {
         // If the client sends a list of its currently synced messages, pass them to the syncer.
         } else if (clientCommand.contains("have_message_ids:")) {
             if (mSyncer != null) {
-                Gson gson = new Gson();
-                String jsonString = clientCommand.split(": ")[1];
-                ArrayList<Long> clientMessageIDs = gson.fromJson(jsonString,
-                        new TypeToken<ArrayList<Long>>() {}.getType());
-                mSyncer.setClientMessageIDs(clientMessageIDs);
+                try {
+                    Gson gson = new Gson();
+                    String jsonString = clientCommand.split(": ")[1];
+                    ArrayList<Long> clientMessageIDs = gson.fromJson(jsonString,
+                            new TypeToken<ArrayList<Long>>() {
+                            }.getType());
+                    mSyncer.setClientMessageIDs(clientMessageIDs);
+                } catch (Exception e) {
+                    Log.e(TAG, String.format("handleCommand: " +
+                                    "Error receiving message id's for device: %s!",
+                            mDeviceTag), e);
+                    mSyncer.interrupt();
+                }
             }
 
         // If the client sends a list of its currently synced calls, pass them to the syncer.

@@ -1,21 +1,22 @@
 // Style.qml
 pragma Singleton
 import QtQuick 2.0
+import QtGraphicalEffects 1.15
 
 QtObject {
-    property color primary: "#6200EE"
-    property color primaryVariant: "#3700B3"
-    property color secondary: "#03DAC6"
-    property color secondaryVariant: "#018786"
+    property color primary: "#6200EA"
+    property color primaryVariant: "#311B92"
+    property color secondary: "#3F51B5"
+    property color secondaryVariant: "#283593"
     property color background: "#FFFFFF"
-    property color surface: "#424242"
-    property color error: "#B00020"
+    property color surface: "#E0E0E0"
+    property color error: "#D50000"
     property color colorOnPrimary: "#FFFFFF"
     property color colorOnSecondary: "#FFFFFF"
     property color colorOnBackground: "#000000"
-    property color colorOnSurface: "#FFFFFF"
+    property color colorOnSurface: "#000000"
     property color colorOnError: "#FFFFFF"
-    property color inactive: "#7962af"
+    property color inactive: "#BDBDBD"
 }
 /*##^##
 Designer {

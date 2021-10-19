@@ -127,14 +127,16 @@ public class BluetoothConnectService extends Service {
                         String deviceName = bluetoothDevice.getName();
                         String deviceTag = String.format("%s (%s)", deviceName, deviceAddress);
 
-                        Log.d(TAG, String.format("onReceive: " +
-                                        "Device disconnected! Stopping connection for device: %s!",
-                                deviceTag));
+                        if (Utils.inPairedPCS(deviceAddress)) {
+                            Log.d(TAG, String.format("onReceive: Device disconnected! " +
+                                            "Stopping connection for device: %s!",
+                                    deviceTag));
 
-                        stopConnection(bluetoothDevice);
+                            stopConnection(bluetoothDevice);
 
-                        Utils.broadcastConnectionChange(getApplicationContext(),
-                                bluetoothDevice.getAddress());
+                            Utils.broadcastConnectionChange(getApplicationContext(),
+                                    bluetoothDevice.getAddress());
+                        }
                         break;
                     }
 

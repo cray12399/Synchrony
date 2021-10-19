@@ -1,6 +1,8 @@
+import socket
+
+import gui
 import syncing
 import utils
-
 import json
 import logging
 import os
@@ -9,6 +11,7 @@ import time
 from configparser import ConfigParser
 import bluetooth
 import pyclip
+import gui
 
 
 class Phone:
@@ -21,6 +24,7 @@ class Phone:
         self.__directory = initialize_directory(name, address)
         self.__logger = logger
         self.__bluetooth_socket = None
+        self.__command_queue = []
 
         # Start sync thread which is responsible for doing the background activity for the target device.
         self.__sync_thread = threading.Thread(target=self.__manage_connected_socket)
@@ -41,8 +45,8 @@ class Phone:
                 self.__listen_for_bluetooth_command()
                 time.sleep(.5)
             else:
-                time.sleep(5)
                 self.__bluetooth_socket = self.__connect_socket()
+                time.sleep(5)
 
         if self.__bluetooth_socket is not None:
             self.__bluetooth_socket.close()
@@ -57,14 +61,24 @@ class Phone:
             host = first_match["host"]
 
             bluetooth_sync_socket.connect((host, utils.SERVER_PORT))
-            bluetooth_sync_socket.settimeout(10)
 
+            # Test the connection in case the server drops the connection due to no connection setting.
+            bluetooth_sync_socket.settimeout(3)
+            bluetooth_sync_socket.recv(16).decode('utf-8')
+
+            bluetooth_sync_socket.settimeout(10)
+            self.__add_to_command_queue(gui.UPDATE_SOCKET_CONNECTION, json.dumps({'address': self.__address,
+                                                                                  'btSocketConnected': True}))
             self.__logger.info(f"Connected to device's sync socket: {self.__name} ({self.__address})!")
+
         except bluetooth.btcommon.BluetoothError as e:
             if e.errno != 111:
                 self.__logger.exception(
                     f"Error connecting to device's sync socket: {self.__name} ({self.__address})! \n {e}")
 
+            return None
+
+        except socket.timeout:
             return None
 
         return bluetooth_sync_socket
@@ -88,10 +102,11 @@ class Phone:
             self.__bluetooth_socket.close()
             self.__bluetooth_socket = None
 
+            self.__add_to_command_queue(gui.UPDATE_SOCKET_CONNECTION, json.dumps({'address': self.__address,
+                                                                                  'btSocketConnected': False}))
+
     def __handle_commands(self, server_commands):
         for server_command in server_commands:
-            # If the server command isn't blank, update the heartbeat time, since
-            # a command is equivalent to a heartbeat.
             if server_command != "":
                 self.__logger.debug(f"Command received from device: {self.__name} ({self.__address}):"
                                     f" {server_command.split(':')[0]}!")
@@ -191,6 +206,15 @@ class Phone:
         logging.info(f"Writing contact photo for contact id: {contact_photo['contact_id']} from device:"
                      f" {self.__name} ({self.__address}) to contacts...")
         syncing.Contacts.write_contact_photo_to_database(self.__directory, contact_photo)
+
+    def remove_from_queue(self, index):
+        self.__command_queue.pop(index)
+
+    def __add_to_command_queue(self, command, command_data):
+        self.__command_queue.append([command, command_data])
+
+    def get_command_queue(self):
+        return self.__command_queue
 
     def get_bluetooth_socket(self):
         return self.__bluetooth_socket

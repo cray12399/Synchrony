@@ -2,11 +2,16 @@ import socket
 import utils
 import pydbus
 import json
-import time
 import select
 import bluetooth
 import subprocess
 from phone import Phone
+import gui
+
+LOG = 'log'
+SEND_FILE = 'send_file'
+SEND_CLIPBOARD = 'send_clipboard'
+DO_SYNC = 'do_sync'
 
 
 class Backend:
@@ -24,10 +29,10 @@ class Backend:
 
     def __run(self):
         while True:
-            self.__handle_devices()
-            self.__handle_connections()
+            self.__handle_phones()
+            self.__handle_gui_connection()
 
-    def __handle_devices(self):
+    def __handle_phones(self):
         """Tries to find connected devices that are compatible with the program."""
 
         # Iterate over every device connected by bluetooth.
@@ -44,11 +49,11 @@ class Backend:
 
             # If it is compatible and it is not being connected, connect it.
             if is_phone and device_address not in self.__phone_connections.keys():
-                self.__phone_connections[device_address] = Phone(device_name,
-                                                                 device_address,
-                                                                 service_matches,
-                                                                 self.__logger)
-                self.__send_phone_connection_list()
+                phone = Phone(device_name, device_address, service_matches, self.__logger)
+                self.__phone_connections[device_address] = phone
+
+                if self.__gui_client_socket is not None:
+                    self.__send_phone_data_to_gui(phone)
 
         # Check for devices that are no longer connected and stop their connection background services.
         connections_to_remove = []
@@ -56,19 +61,25 @@ class Backend:
             if device_address not in [connected_device['address'] for connected_device in list_connected_devices()]:
                 phone = self.__phone_connections[device_address]
                 phone.stop_thread()
+
                 self.__logger.info(f"Stopped connection for device: {phone.get_name()} ({phone.get_address()})!")
 
                 connections_to_remove.append(device_address)
 
         # Remove non-existent connections from the phone connections list.
         if len(connections_to_remove):
-            for connection in connections_to_remove:
-                self.__phone_connections.pop(connection)
-            self.__send_phone_connection_list()
+            for address in connections_to_remove:
+                self.__phone_connections.pop(address)
+                self.__remove_phone_data_from_gui(address)
 
-    def __handle_connections(self):
-        """Handles connections with GUI."""
+        for phone in self.__phone_connections.values():
+            for command_index in range(len(phone.get_command_queue())):
+                if command_index < len(phone.get_command_queue()):
+                    command = phone.get_command_queue()[command_index]
+                    self.__send_backend_command(command[0], command[1])
+                    phone.remove_from_queue(command_index)
 
+    def __handle_gui_connection(self):
         if self.__gui_client_socket is not None:
             ready = select.select([self.__gui_client_socket], [], [], utils.SOCKET_TIMEOUT)
             if ready[0]:
@@ -77,6 +88,8 @@ class Backend:
                 if reset_connection:
                     self.__gui_client_socket = None
                     self.__gui_client_address = None
+
+                    self.__logger.debug("GUI disconnected!")
         else:
             self.__make_gui_connection()
 
@@ -99,6 +112,8 @@ class Backend:
                 test_connection = True
         except socket.timeout:
             test_connection = True
+        except ConnectionResetError:
+            test_connection = True
 
         if test_connection:
             try:
@@ -117,6 +132,8 @@ class Backend:
         phone = self.__phone_connections.get(phone_address)
         phone.get_bluetooth_socket().send(f"do_sync{utils.COMMAND_DELIMITER}")
 
+        self.__logger.info(f"Requested sync from device: {phone_name} ({phone_address})!")
+
     def __send_clipboard(self, command_data):
         """Sends a command to the target phone to share clipboard."""
 
@@ -127,10 +144,18 @@ class Backend:
         phone = self.__phone_connections.get(phone_address)
         phone.get_bluetooth_socket().send(f"incoming_clipboard: {clipboard}{utils.COMMAND_DELIMITER}")
 
-    def __send_backend_command(self, command):
+        self.__logger.info(f"Sent clipboard to device: {phone_name} ({phone_address})!")
+
+    def __send_backend_command(self, command, command_data=""):
         """Sends a backend command to the GUI."""
 
-        self.__gui_client_socket.send(bytes(f"{command}{utils.COMMAND_DELIMITER}", 'utf-8'))
+        try:
+            if self.__gui_client_socket is not None:
+                self.__gui_client_socket.send(bytes(f"{command}: {command_data}{utils.COMMAND_DELIMITER}", 'utf-8'))
+        except BrokenPipeError:
+            self.__logger.exception(f"Could not send command to GUI: {self.__gui_client_address}!")
+            self.__gui_client_socket = None
+            self.__gui_client_address = None
 
     def __make_gui_connection(self):
         """Attempts to make a connection with GUI. If no connection is established, the connection is set to None."""
@@ -143,20 +168,25 @@ class Backend:
             self.__gui_client_address = client_address_tmp
 
             self.__gui_client_socket.setblocking(False)
+
+            for phone in self.__phone_connections.values():
+                self.__send_phone_data_to_gui(phone)
         except socket.timeout:
             self.__gui_client_socket = None
             self.__gui_client_address = None
 
-    def __send_phone_connection_list(self):
-        """Sends list of phone connections to the GUI."""
+    def __send_phone_data_to_gui(self, phone):
+        phone_data = {'name': phone.get_name(),
+                      'address': phone.get_address(),
+                      'btSocketConnected': phone.get_bluetooth_socket() is not None}
 
-        phone_connections = json.dumps(
-            {phone.get_name(): phone.get_address() for phone in self.__phone_connections.values()})
         if self.__gui_client_socket is not None:
-            try:
-                self.__send_backend_command(f"incoming_phone_list: {phone_connections}{utils.COMMAND_DELIMITER}")
-            except Exception as e:
-                print(e)
+            self.__send_backend_command(gui.INCOMING_PHONE_DATA, json.dumps(phone_data))
+
+        self.__logger.debug(f"Sent phone connection data to GUI: {self.__gui_client_address}!")
+
+    def __remove_phone_data_from_gui(self, phone_address):
+        self.__send_backend_command(gui.REMOVE_PHONE_DATA, phone_address)
 
     def __gui_log(self, level, message, stacktrace):
         """Since the logger cannot be shared with GUI, logs messages received from GUI log command."""
@@ -171,26 +201,27 @@ class Backend:
     def __handle_gui_command(self, command):
         """Handles all incoming GUI commands and passes their data (if applicable) to the relevant function."""
 
-        if 'log' not in command:
-            self.__logger.debug(f"GUI ({self.__gui_client_address}): {command}")
+        try:
+            if LOG not in command:
+                self.__logger.debug(f"GUI ({self.__gui_client_address}): {command}")
 
-        if 'log' in command:
-            log = json.loads(command[len('log: '):])
-            self.__gui_log(log[0], log[1], log[2])
-        elif 'get_phone_connection_list' in command:
-            self.__send_phone_connection_list()
-        elif 'send_file' in command:
-            command_data = json.loads(command[len("send_file: "):])
-            send_file(command_data)
-        elif 'send_clipboard' in command:
-            command_data = json.loads(command[len("send_clipboard: "):])
-            self.__send_clipboard(command_data)
-        elif 'do_sync' in command:
-            command_data = json.loads(command[len("do_sync: "):])
-            self.__do_sync(command_data)
+            if LOG in command:
+                log_data = json.loads(command[len(f"{LOG}: "):])
+                self.__gui_log(log_data[0], log_data[1], log_data[2])
+            elif SEND_FILE in command:
+                command_data = json.loads(command[len(f"{SEND_FILE}: "):])
+                send_file(command_data, self.__logger)
+            elif SEND_CLIPBOARD in command:
+                command_data = json.loads(command[len(f"{SEND_CLIPBOARD}: "):])
+                self.__send_clipboard(command_data)
+            elif DO_SYNC in command:
+                command_data = json.loads(command[len(f"{DO_SYNC}: "):])
+                self.__do_sync(command_data)
+        except:
+            self.__logger.exception(f"Exception raised when handling GUI command: {command}")
 
 
-def send_file(command_data):
+def send_file(command_data, logger):
     """Sends a file to a phone using OBEX."""
 
     file_name = command_data['file_name']
@@ -198,6 +229,8 @@ def send_file(command_data):
     phone_address = command_data['phone_address']
 
     output = subprocess.check_output(['bt-obex', '-p', phone_address, file_name])
+
+    logger.info(f"Sent file: {file_name} to device: {phone_name} ({phone_address})")
 
 
 def list_connected_devices():

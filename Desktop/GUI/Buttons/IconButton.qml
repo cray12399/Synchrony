@@ -14,6 +14,7 @@ RoundButton {
     property bool selected: false
     property int animationDuration: 300
     property int numNewContent: 0
+    property int iconMargin: 7
 
     id: iconBtn
 
@@ -116,7 +117,7 @@ RoundButton {
             anchors.verticalCenter: parent.verticalCenter
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.fill: parent
-            anchors.margins: 7
+            anchors.margins: iconMargin
             sourceSize.height: height
             sourceSize.width: width
             fillMode: Image.PreserveAspectFit
