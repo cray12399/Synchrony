@@ -12,9 +12,8 @@ import json
 import select
 import traceback
 import pyclip
-import backend
-
 import utils
+from data_models import PhoneDataModel, SqlModelHandler
 
 INCOMING_PHONE_DATA = 'incoming_phone_data'
 REMOVE_PHONE_DATA = 'remove_phone_data'
@@ -31,6 +30,7 @@ class MainWindow(QObject):
         super().__init__(None)
 
         self.__phone_data_model = PhoneDataModel()
+        self.__sql_model_handler = SqlModelHandler()
         self.__backend_socket = backend_socket
         self.__thread_pool = QThreadPool(self)
 
@@ -48,10 +48,23 @@ class MainWindow(QObject):
         self.__looper_thread.update_bt_socket_signal.connect(self.__update_socket_connection)
         self.__looper_thread.start()
 
-    def get_phoneDataModel(self):
+    def get_phone_data_model(self):
         return self.__phone_data_model
 
-    phoneDataModel = Property(QObject, fget=get_phoneDataModel, constant=True)
+    phoneDataModel = Property(QObject, fget=get_phone_data_model, constant=True)
+
+    def get_sql_model_handler(self):
+        return self.__sql_model_handler
+
+    sqlModelHandler = Property(QObject, fget=get_sql_model_handler, constant=True)
+
+    @Slot('QVariant')
+    def selectedPhoneChanged(self, selected_phone_data):
+        if selected_phone_data is not None:
+            selected_phone_data = {'phone_name': selected_phone_data.property('name').toString(),
+                                   'phone_address': selected_phone_data.property('address').toString()}
+            self.__sql_model_handler.handle_selected_phone_change(selected_phone_data)
+            self.setNumNewMessages.emit(self.__sql_model_handler.get_num_unread_conversations())
 
     @Slot('QVariant')
     def printVar(self, var):
@@ -94,6 +107,7 @@ class MainWindow(QObject):
         self.__phone_data_model.appendRow(phone_data['name'],
                                           phone_data['address'],
                                           phone_data['btSocketConnected'])
+        self.__phone_data_model.appendRow('phone 1', '1001', True)
 
     def __update_socket_connection(self, command_data):
         phone_address = command_data['address']
@@ -204,86 +218,6 @@ class Worker(QRunnable):
     @Slot()
     def run(self):
         self.__fn(*self.__args, )
-
-
-class PhoneDataModel(QAbstractListModel):
-    NameRole = Qt.UserRole + 1000
-    AddressRole = Qt.UserRole + 1001
-    BtSocketConnectedRole = Qt.UserRole + 1002
-    properties = ['name', 'address', 'btSocketConnected']
-
-    dataChanged = Signal()
-
-    def __init__(self, phone_data=None, parent=None):
-        super(PhoneDataModel, self).__init__(parent)
-        if phone_data is None:
-            self.__phone_data = []
-        else:
-            self.__phone_data = phone_data
-
-    @Property(int)
-    def count(self):
-        return len(self.__phone_data)
-
-    def rowCount(self, parent=QModelIndex()):
-        return len(self.__phone_data)
-
-    def data(self, index, role=Qt.DisplayRole):
-        if 0 <= index.row() < self.rowCount() and index.isValid():
-            if role == PhoneDataModel.NameRole:
-                return self.__phone_data[index.row()]["name"]
-            elif role == PhoneDataModel.AddressRole:
-                return self.__phone_data[index.row()]["address"]
-            elif role == PhoneDataModel.BtSocketConnectedRole:
-                return self.__phone_data[index.row()]["btSocketConnected"]
-
-    @Slot(int, result='QVariant')
-    def get(self, row):
-        if 0 <= row < self.rowCount():
-            return self.__phone_data[row]
-
-    def roleNames(self):
-        roles = super().roleNames()
-        roles[PhoneDataModel.NameRole] = b"name"
-        roles[PhoneDataModel.AddressRole] = b"address"
-        roles[PhoneDataModel.BtSocketConnectedRole] = b"btSocketConnected"
-        return roles
-
-    def appendRow(self, name, address, bt_socket_connected):
-        self.beginInsertRows(QModelIndex(), self.rowCount(), self.rowCount())
-        self.__phone_data.append({'name': name, 'address': address, 'btSocketConnected': bt_socket_connected})
-        self.endInsertRows()
-        self.dataChanged.emit()
-
-    def removeRow(self, row, parent=None, *args, **kwargs):
-        self.beginRemoveRows(QModelIndex(), row, row)
-        self.__phone_data.pop(row)
-        self.endRemoveRows()
-        self.dataChanged.emit()
-
-    def removeRowByAddress(self, phone_address):
-        for row_index in range(self.rowCount()):
-            if self.__phone_data[row_index]['address'] == phone_address:
-                self.removeRow(row_index)
-                self.dataChanged.emit()
-                break
-
-    def editPropertiesByAddress(self, phone_address, **kwargs):
-        for row_index in range(self.rowCount()):
-            if self.__phone_data[row_index]['address'] == phone_address:
-                for object_property in self.properties:
-                    value = kwargs.get(object_property, None)
-                    if value is not None:
-                        self.__phone_data[row_index][object_property] = value
-                        self.dataChanged.emit()
-
-    def setData(self, index, value, role=Qt.EditRole):
-        if not index.isValid():
-            return False
-        if role == Qt.EditRole:
-            item = index.internalPointer()
-            item.set_name(value)
-        return True
 
 
 def log(backend_socket, level, message, exception=False):

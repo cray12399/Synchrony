@@ -91,6 +91,10 @@ Window {
                     onCurrentIndexChanged: {
                         phoneAppConnection = phoneData.get(phoneSelector.currentIndex).btSocketConnected
                     }
+
+                    onCurrentTextChanged: {
+                        backend.selectedPhoneChanged(phoneData.get(phoneSelector.currentIndex))
+                    }
                 }
 
                 Row {
@@ -352,6 +356,10 @@ Window {
 
     Connections {
         target: backend
+
+        function onSetNumNewMessages(numNewMessages) {
+            conversationsBtn.numNewContent = numNewMessages
+        }
     }
 }
 

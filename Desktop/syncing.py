@@ -82,6 +82,7 @@ class Contacts:
         cursor.execute("SELECT * FROM contact_phones WHERE contact_id = ?", (contact['mPrimaryKey'],))
         if len(cursor.fetchall()) == 0:
             for phone_type, number in contact['mPhones'].items():
+                number = number.replace('(', '').replace(')', '').replace('-', '').replace(' ', '')[-10:]
                 cursor.execute("INSERT INTO contact_phones VALUES (?, ?, ?)",
                                (phone_type, number, contact['mPrimaryKey']))
         else:
@@ -197,8 +198,9 @@ class Messages:
         connection = sqlite3.connect(f"{phone_dir}/data/messages")
         cursor = connection.cursor()
 
+        number = message['mNumber'].replace('(', '').replace(')', '').replace('-', '').replace(' ', '')[-10:]
         cursor.execute("INSERT INTO sms VALUES (?, ?, ?, ?, ?, ?, ?)",
-                       (message['mId'], message['mThreadId'], message['mNumber'], message['mDateSent'],
+                       (message['mId'], message['mThreadId'], number, message['mDateSent'],
                         message['mType'], message['mRead'], message['mBody']))
 
         connection.commit()
@@ -226,7 +228,7 @@ class Messages:
                             id INTEGER,
                             thread_id INTEGER,
                             number TEXT,
-                            date_sent TEXT,
+                            date_sent INTEGER,
                             type TEXT,
                             read INTEGER,
                             body TEXT
@@ -246,8 +248,9 @@ class Calls:
         connection = sqlite3.connect(f"{phone_dir}/data/calls")
         cursor = connection.cursor()
 
+        number = call['mNumber'].replace('(', '').replace(')', '').replace('-', '').replace(' ', '')[-10:]
         cursor.execute("INSERT INTO calls VALUES (?, ?, ?, ?, ?)",
-                       (call['mId'], call['mNumber'], call['mType'], call['mDate'], call['mDuration']))
+                       (call['mId'], number, call['mType'], call['mDate'], call['mDuration']))
 
         connection.commit()
         cursor.close()
@@ -297,18 +300,21 @@ class Calls:
 
 
 def desktop_notify(notification):
-    notification = json.loads(notification)
+    try:
+        notification = json.loads(notification)
 
-    if 'appName' in notification.keys():
-        title = notification['appName']
+        if 'appName' in notification.keys():
+            title = notification['appName']
 
-        if notification['title'] is not None:
-            title += ': ' + notification['title']
-    elif notification['title'] is not None:
-        title = notification['title']
-    else:
-        title = "No Title"
+            if notification['title'] is not None:
+                title += ': ' + notification['title']
+        elif notification['title'] is not None:
+            title = notification['title']
+        else:
+            title = "No Title"
 
-    text = "No Description" if notification['text'] is None else str(notification['text'])
+        text = "No Description" if notification['text'] is None else str(notification['text'])
 
-    os.system(f"notify-send \"{title}\" \"{text}\"")
+        os.system(f"notify-send \"{title}\" \"{text}\"")
+    except Exception as e:
+        print(e)

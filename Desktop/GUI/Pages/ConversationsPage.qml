@@ -8,12 +8,24 @@ import QtQuick.Layouts 1.11
 
 Rectangle {
     property var selectedPhone
-    property var conversationsListModel: [["John", "Hello dude"], ["Mary", "I just picked up the groceries"], ["Zack", "The quick brown fox jumps over the lazy dog"]]
+    property var sqlModelHandler: backend.sqlModelHandler
+    property var conversationsListModel: sqlModelHandler.conversationsListModel
     property int conversationIndex
     property var selectedConversation: conversationsListModel[conversationIndex]
 
+    id: conversationsPage
+
     anchors.fill: parent
     color: Style.background
+
+    Connections {
+        target: conversationsPage.conversationsListModel
+
+        function onDataChanged() {
+            conversationsPage.conversationsListModel = sqlModelHandler.conversationsListModel
+        }
+
+    }
 
     SplitView {
         id: splitView
@@ -205,7 +217,7 @@ Rectangle {
                                 id: contactNameText
                                 anchors.right: parent.right
                                 anchors.left: parent.left
-                                text: conversationListView.model[index][0]
+                                text: name
                                 font.bold: true
                                 color: parent.textColor
                                 font.pixelSize: 15
@@ -214,7 +226,9 @@ Rectangle {
 
                             Label {
                                 id: lastMessageText
-                                text: conversationListView.model[index][1]
+                                text: lastMessage
+                                font.bold: !read
+                                font.italic: type === "Sent"
                                 anchors.top: contactNameText.bottom
                                 anchors.right: parent.right
                                 anchors.left: parent.left
