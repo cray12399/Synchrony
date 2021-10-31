@@ -129,6 +129,32 @@ class ContactsSqlModel(QSqlQueryModel):
 
         return person
 
+    def get_photo_by_id(self, contact_id):
+        db = self.__get_db()
+
+        self.setQuery(f"SELECT base64 FROM contact_photos WHERE contact_id = {contact_id}", db=db)
+        record = self.record(0)
+
+        photo = record.value('base64')
+
+        db.close()
+
+        return photo
+
+    def get_photo_by_number(self, number):
+        db = self.__get_db()
+
+        self.setQuery(f"SELECT contact_id FROM contact_phones WHERE number LIKE {number}", db=db)
+        contact_id = self.record(0).value("contact_id")
+        self.setQuery(f"SELECT base64 FROM contact_photos WHERE contact_id = {contact_id}", db=db)
+        record = self.record(0)
+
+        photo = record.value('base64')
+
+        db.close()
+
+        return photo
+
     def __get_db(self):
         db = QSqlDatabase.addDatabase("QSQLITE")
         db.setDatabaseName(f"{self.__phone_dir}/data/contacts")
@@ -150,9 +176,7 @@ class MessagesSqlModel(QSqlQueryModel):
         self.__phone_dir = phone_dir
 
     def get_row(self, row_id):
-        db = QSqlDatabase.addDatabase("QSQLITE")
-        db.setDatabaseName(f"{self.__phone_dir}/data/messages")
-        db.open()
+        db = self.__get_db()
 
         self.setQuery(f"SELECT * FROM sms WHERE id = {row_id}", db=db)
         record = self.record(0)
@@ -183,6 +207,27 @@ class MessagesSqlModel(QSqlQueryModel):
         db.close()
         return last_messages
 
+    def get_current_messages(self, number):
+        db = self.__get_db()
+
+        current_messages = []
+
+        self.setQuery(f"SELECT * FROM sms WHERE number = {number}", db=db)
+        row = 0
+        while self.record(row).value('body') is not None:
+            message = {
+                'number': self.record(row).value('number'),
+                'type': self.record(row).value('type'),
+                'body': self.record(row).value('body'),
+                'time': str(datetime.fromtimestamp(self.record(row).value('date_sent') / 1000)),
+                'photo': ''
+            }
+            current_messages.append(message)
+            row += 1
+
+        db.close()
+        return current_messages
+
     def __get_db(self):
         db = QSqlDatabase.addDatabase("QSQLITE")
         db.setDatabaseName(f"{self.__phone_dir}/data/messages")
@@ -203,7 +248,7 @@ class MessagesSqlModel(QSqlQueryModel):
 
     def __get_last_message_data(self, db, thread_id):
         self.setQuery(f"SELECT DISTINCT * FROM sms WHERE thread_id = {thread_id} "
-                      f"ORDER BY date_sent", db=db)
+                      f"ORDER BY date_sent DESC", db=db)
 
         last_message_data = {
             'name': self.record(0).value('number'),
@@ -212,7 +257,8 @@ class MessagesSqlModel(QSqlQueryModel):
             'threadId': thread_id,
             'type': self.record(0).value('type'),
             'read': bool(self.record(0).value('read')),
-            'number': self.record(0).value('number')
+            'number': self.record(0).value('number'),
+            'photo': ''
         }
 
         return last_message_data
@@ -269,11 +315,17 @@ class SqlModelHandler(QObject):
         self.__contacts_model = ContactsSqlModel()
 
         self.__conversations_list_model = ConversationsListModel()
+        self.__current_conversation_list_model = CurrentConversationListModel()
 
     def get_conversations_list_model(self):
         return self.__conversations_list_model
 
     conversationsListModel = Property(QObject, fget=get_conversations_list_model, constant=True)
+
+    def get_current_conversation_list_model(self):
+        return self.__current_conversation_list_model
+
+    currentConversationListModel = Property(QObject, fget=get_current_conversation_list_model, constant=False)
 
     def set_phone_dir(self, phone_dir):
         self.__phone_dir = phone_dir
@@ -282,9 +334,20 @@ class SqlModelHandler(QObject):
         self.__messages_model.set_phone_dir(phone_dir)
         self.__contacts_model.set_phone_dir(phone_dir)
 
-        last_messages = self.__messages_model.get_last_messages()
-        conversation_data = self.__fill_in_last_message_names(last_messages)
-        self.__conversations_list_model.setConversationData(conversation_data)
+        last_messages = [i for i in reversed(self.__messages_model.get_last_messages())]
+        last_messages = self.__fill_in_last_message_names(last_messages)
+        last_messages = self.__set_contact_photos(last_messages)
+        self.__conversations_list_model.set_list_data(last_messages)
+
+        if len(last_messages):
+            self.setCurrentMessages(last_messages[0]['number'])
+
+    @Slot(str)
+    def setCurrentMessages(self, number):
+        current_messages = self.__messages_model.get_current_messages(number)
+
+        self.__set_contact_photos(current_messages)
+        self.__current_conversation_list_model.set_list_data(current_messages)
 
     def __fill_in_last_message_names(self, last_messages):
         for message_index in range(len(last_messages)):
@@ -294,6 +357,15 @@ class SqlModelHandler(QObject):
                 last_messages[message_index]['name'] = person['name']
 
         return last_messages
+
+    def __set_contact_photos(self, messages):
+        for message_index in range(len(messages)):
+            message = messages[message_index]
+            photo = self.__contacts_model.get_photo_by_number(message['number'])
+            if photo is not None:
+                messages[message_index]['photo'] = "data:image/png;base64," + str(photo, 'utf-8') + ""
+
+        return messages
 
     def handle_selected_phone_change(self, selected_phone_data):
         name = selected_phone_data['phone_name']
@@ -312,45 +384,48 @@ class ConversationsListModel(QAbstractListModel):
     NumberRole = Qt.UserRole + 1104
     TypeRole = Qt.UserRole + 1105
     ReadRole = Qt.UserRole + 1106
-    properties = ['name', 'lastMessage', 'dateSent', 'threadId', 'number', 'type', 'read']
+    PhotoRole = Qt.UserRole + 1107
+    properties = ['name', 'lastMessage', 'dateSent', 'threadId', 'number', 'type', 'read', 'photo']
 
     dataChanged = Signal()
 
-    def __init__(self, phone_data=None, parent=None):
+    def __init__(self, last_message_data=None, parent=None):
         super(ConversationsListModel, self).__init__(parent)
-        if phone_data is None:
-            self.__conversation_data = []
+        if last_message_data is None:
+            self.__last_message_data = []
         else:
-            self.__conversation_data = phone_data
+            self.__last_message_data = last_message_data
 
     @Property(int)
     def count(self):
-        return len(self.__conversation_data)
+        return len(self.__last_message_data)
 
     def rowCount(self, parent=QModelIndex()):
-        return len(self.__conversation_data)
+        return len(self.__last_message_data)
 
     def data(self, index, role=Qt.DisplayRole):
         if 0 <= index.row() < self.rowCount() and index.isValid():
             if role == ConversationsListModel.NameRole:
-                return self.__conversation_data[index.row()]["name"]
+                return self.__last_message_data[index.row()]["name"]
             elif role == ConversationsListModel.LastMessageRole:
-                return self.__conversation_data[index.row()]["lastMessage"]
+                return self.__last_message_data[index.row()]["lastMessage"]
             elif role == ConversationsListModel.DateSentRole:
-                return self.__conversation_data[index.row()]["dateSent"]
+                return self.__last_message_data[index.row()]["dateSent"]
             elif role == ConversationsListModel.ThreadIdRole:
-                return self.__conversation_data[index.row()]["threadId"]
+                return self.__last_message_data[index.row()]["threadId"]
             elif role == ConversationsListModel.NumberRole:
-                return self.__conversation_data[index.row()]["number"]
+                return self.__last_message_data[index.row()]["number"]
             elif role == ConversationsListModel.TypeRole:
-                return self.__conversation_data[index.row()]["type"]
+                return self.__last_message_data[index.row()]["type"]
             elif role == ConversationsListModel.ReadRole:
-                return self.__conversation_data[index.row()]["read"]
+                return self.__last_message_data[index.row()]["read"]
+            elif role == ConversationsListModel.PhotoRole:
+                return self.__last_message_data[index.row()]["photo"]
 
     @Slot(int, result='QVariant')
     def get(self, row):
         if 0 <= row < self.rowCount():
-            return self.__conversation_data[row]
+            return self.__last_message_data[row]
 
     def roleNames(self):
         roles = super().roleNames()
@@ -361,18 +436,20 @@ class ConversationsListModel(QAbstractListModel):
         roles[ConversationsListModel.NumberRole] = b"number"
         roles[ConversationsListModel.TypeRole] = b"type"
         roles[ConversationsListModel.ReadRole] = b"read"
+        roles[ConversationsListModel.PhotoRole] = b"photo"
         return roles
 
-    def appendRow(self, name, last_message, date_sent, thread_id, number, _type, read):
+    def appendRow(self, name, last_message, date_sent, thread_id, number, _type, read, photo):
         self.beginInsertRows(QModelIndex(), self.rowCount(), self.rowCount())
-        self.__conversation_data.append({'name': name, 'lastMessage': last_message, 'dateSent': date_sent,
-                                         'threadId': thread_id, 'number': number, 'type': _type, 'read': read})
+        self.__last_message_data.append({'name': name, 'lastMessage': last_message, 'dateSent': date_sent,
+                                         'threadId': thread_id, 'number': number, 'type': _type, 'read': read,
+                                         'photo': photo})
         self.endInsertRows()
         self.dataChanged.emit()
 
     def removeRow(self, row, parent=None, *args, **kwargs):
         self.beginRemoveRows(QModelIndex(), row, row)
-        self.__conversation_data.pop(row)
+        self.__last_message_data.pop(row)
         self.endRemoveRows()
         self.dataChanged.emit()
 
@@ -384,22 +461,115 @@ class ConversationsListModel(QAbstractListModel):
             item.set_name(value)
         return True
 
-    def setConversationData(self, conversation_data):
-        self.beginRemoveRows(QModelIndex(), 0, len(self.__conversation_data) - 1)
-        self.__conversation_data = []
+    def set_list_data(self, last_messages):
+        self.beginRemoveRows(QModelIndex(), 0, len(self.__last_message_data) - 1)
+        self.__last_message_data = []
         self.endRemoveRows()
 
-        for conversation in conversation_data:
-            self.appendRow(conversation['name'], conversation['lastMessage'], conversation['dateSent'],
-                           conversation['threadId'], conversation['number'], conversation['type'], conversation['read'])
+        for message in last_messages:
+            self.appendRow(message['name'], message['lastMessage'], message['dateSent'],
+                           message['threadId'], message['number'], message['type'], message['read'],
+                           message['photo'])
         self.dataChanged.emit()
 
     def getNumUnread(self):
         num_unread = 0
-        for conversation in self.__conversation_data:
+        for conversation in self.__last_message_data:
             if not conversation['read']:
                 num_unread += 1
 
         return num_unread
+
+
+class CurrentConversationListModel(QAbstractListModel):
+    NumberRole = Qt.UserRole + 1200
+    TypeRole = Qt.UserRole + 1201
+    BodyRole = Qt.UserRole + 1202
+    TimeRole = Qt.UserRole + 1203
+    PhotoRole = Qt.UserRole + 1204
+
+    properties = ['number', 'type', 'body', 'time', 'photo']
+
+    dataChanged = Signal()
+
+    def __init__(self, messages=None, parent=None):
+        super(CurrentConversationListModel, self).__init__(parent)
+        if messages is None:
+            self.__messages = []
+        else:
+            self.__messages = messages
+
+    @Property(int)
+    def count(self):
+        return len(self.__messages)
+
+    def rowCount(self, parent=QModelIndex()):
+        return len(self.__messages)
+
+    def data(self, index, role=Qt.DisplayRole):
+        if 0 <= index.row() < self.rowCount() and index.isValid():
+            if role == CurrentConversationListModel.NumberRole:
+                return self.__messages[index.row()]["number"]
+            if role == CurrentConversationListModel.TypeRole:
+                return self.__messages[index.row()]["type"]
+            if role == CurrentConversationListModel.BodyRole:
+                return self.__messages[index.row()]["body"]
+            if role == CurrentConversationListModel.TimeRole:
+                return self.__messages[index.row()]["time"]
+            if role == CurrentConversationListModel.PhotoRole:
+                return self.__messages[index.row()]["photo"]
+
+    @Slot(int, result='QVariant')
+    def get(self, row):
+        if 0 <= row < self.rowCount():
+            return self.__messages[row]
+
+    def roleNames(self):
+        roles = super().roleNames()
+        roles[CurrentConversationListModel.NumberRole] = b"number"
+        roles[CurrentConversationListModel.TypeRole] = b"type"
+        roles[CurrentConversationListModel.BodyRole] = b"body"
+        roles[CurrentConversationListModel.TimeRole] = b"time"
+        roles[CurrentConversationListModel.PhotoRole] = b"photo"
+
+        return roles
+
+    def appendRow(self, number, _type, body, _time, photo):
+        self.beginInsertRows(QModelIndex(), self.rowCount(), self.rowCount())
+        self.__messages.append({'number': number, 'type': _type, 'body': body, 'time': _time, 'photo': photo})
+        self.endInsertRows()
+        self.dataChanged.emit()
+
+    def removeRow(self, row, parent=None, *args, **kwargs):
+        self.beginRemoveRows(QModelIndex(), row, row)
+        self.__messages.pop(row)
+        self.endRemoveRows()
+        self.dataChanged.emit()
+
+    def setData(self, index, value, role=Qt.EditRole):
+        if not index.isValid():
+            return False
+        if role == Qt.EditRole:
+            item = index.internalPointer()
+            item.set_name(value)
+        return True
+
+    def getNumUnread(self):
+        num_unread = 0
+        for conversation in self.__messages:
+            if not conversation['read']:
+                num_unread += 1
+
+        return num_unread
+
+    def set_list_data(self, current_messages):
+        self.beginRemoveRows(QModelIndex(), 0, len(self.__messages) - 1)
+        self.__messages = []
+        self.endRemoveRows()
+
+        for message in current_messages:
+            self.appendRow(message['number'], message['type'], message['body'],
+                           message['time'], message['photo'])
+        self.dataChanged.emit()
 
 

@@ -102,6 +102,14 @@ class MainWindow(QObject):
             self.run_in_background(send_gui_command, self.__backend_socket,
                                    f"send_file: {json.dumps(command_data)}")
 
+    @Slot('QVariant', str, str)
+    def sendMessage(self, selected_phone_data, message, recipient_number):
+        # selected_phone_data = {'phone_name': selected_phone_data.property('name').toString(),
+        #                        'phone_address': selected_phone_data.property('address').toString()}
+        print(selected_phone_data)
+        print(message)
+        print(recipient_number)
+
     def __add_phone_data(self, phone_data):
         """Updates the phone connection data list and updates GUI phone data."""
         self.__phone_data_model.appendRow(phone_data['name'],

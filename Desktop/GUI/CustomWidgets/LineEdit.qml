@@ -32,8 +32,8 @@ Rectangle {
         anchors.fill: parent
         anchors.leftMargin: 10
         anchors.rightMargin: 10
-        color: textColor
-        visible: !textInput.focus && textInput.text == ""
+        color: Style.inactive
+        visible: textInput.text == ""
         z: 1
     }
 

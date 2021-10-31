@@ -7,6 +7,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.database.Cursor;
 import android.net.Uri;
+import android.os.SystemClock;
 import android.provider.CallLog;
 import android.provider.ContactsContract;
 import android.provider.Telephony;
@@ -20,6 +21,7 @@ import com.google.gson.Gson;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.Calendar;
 import java.util.HashMap;
@@ -268,13 +270,6 @@ public class Syncer extends Thread {
                 message.setRead(cursor.getInt(
                         cursor.getColumnIndexOrThrow(Telephony.Sms.READ)));
 
-                DateFormat formatter = SimpleDateFormat.getDateTimeInstance(
-                        DateFormat.SHORT, DateFormat.SHORT);
-                Calendar calendar = Calendar.getInstance();
-                calendar.setTimeInMillis(cursor.getLong(
-                        cursor.getColumnIndexOrThrow(Telephony.Sms.DATE_SENT)));
-                message.setDateSent(formatter.format(calendar.getTime()));
-
                 int type = cursor.getInt(cursor.getColumnIndexOrThrow(Telephony.Sms.TYPE));
                 switch (type) {
                     case Telephony.Sms.MESSAGE_TYPE_INBOX:
@@ -289,6 +284,16 @@ public class Syncer extends Thread {
                     default:
                         break;
                 }
+
+                long dateSentMillis = 0;
+                if (type == Telephony.Sms.MESSAGE_TYPE_SENT) {
+                    dateSentMillis = cursor.getLong(
+                            cursor.getColumnIndexOrThrow(Telephony.Sms.DATE));
+                } else {
+                    dateSentMillis = cursor.getLong(
+                            cursor.getColumnIndexOrThrow(Telephony.Sms.DATE_SENT));
+                }
+                message.setDateSent(dateSentMillis);
 
                 phoneMessages.add(message);
             }
@@ -492,7 +497,7 @@ public class Syncer extends Thread {
         private long mId;
         private long mThreadId;
         private String mNumber;
-        private String mDateSent;
+        private long mDateSent;
         private String mType;
         private String mBody;
         private int mRead;
@@ -526,11 +531,11 @@ public class Syncer extends Thread {
             this.mNumber = mNumber;
         }
 
-        public String getDateSent() {
+        public long getDateSent() {
             return mDateSent;
         }
 
-        public void setDateSent(String mDateSent) {
+        public void setDateSent(long mDateSent) {
             this.mDateSent = mDateSent;
         }
 

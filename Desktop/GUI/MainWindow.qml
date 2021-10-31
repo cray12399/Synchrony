@@ -14,6 +14,7 @@ import "Pages"
 Window {
     property int activePage: 1
     property var phoneData: backend.phoneDataModel
+    property var selectedPhone: phoneData.get(phoneSelector.currentIndex)
     property bool phoneAppConnection: phoneData.get(phoneSelector.currentIndex).btSocketConnected
 
     id: mainWindow
@@ -89,11 +90,16 @@ Window {
                     model: mainWindow.phoneData
 
                     onCurrentIndexChanged: {
+                        mainWindow.selectedPhone = phoneData.get(phoneSelector.currentIndex)
+                        backend.selectedPhoneChanged(phoneData.get(phoneSelector.currentIndex))
                         phoneAppConnection = phoneData.get(phoneSelector.currentIndex).btSocketConnected
                     }
 
                     onCurrentTextChanged: {
-                        backend.selectedPhoneChanged(phoneData.get(phoneSelector.currentIndex))
+                        if (count == 1) {
+                            mainWindow.selectedPhone = phoneData.get(phoneSelector.currentIndex)
+                            backend.selectedPhoneChanged(phoneData.get(phoneSelector.currentIndex))
+                        }
                     }
                 }
 
@@ -275,11 +281,11 @@ Window {
             }
 
             ConversationsPage {
-                selectedPhone: mainWindow.phoneData[phoneSelector.currentIndex]
+                selectedPhone: mainWindow.selectedPhone
             }
 
             CallsPage {
-                selectedPhone: mainWindow.phoneData[phoneSelector.currentIndex]
+                selectedPhone: mainWindow.selectedPhone
             }
 
             Rectangle {
@@ -293,8 +299,8 @@ Window {
                     anchors.top: parent.top
                     anchors.bottom: parent.bottom
                     anchors.horizontalCenter: parent.horizontalCenter
-                    anchors.topMargin: 150
-                    anchors.bottomMargin: 150
+                    anchors.topMargin: 250
+                    anchors.bottomMargin: 250
                     width:height
 
                     Image {

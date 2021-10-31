@@ -4,13 +4,15 @@ import QtGraphicalEffects 1.0
 
 import "../"
 import "../CustomWidgets"
+import "../Buttons"
 import QtQuick.Layouts 1.11
 
 Rectangle {
     property var selectedPhone
     property var sqlModelHandler: backend.sqlModelHandler
     property var conversationsListModel: sqlModelHandler.conversationsListModel
-    property int conversationIndex
+    property var currentMessagesListModel: sqlModelHandler.currentConversationListModel
+    property int conversationIndex: 0
     property var selectedConversation: conversationsListModel[conversationIndex]
 
     id: conversationsPage
@@ -24,7 +26,6 @@ Rectangle {
         function onDataChanged() {
             conversationsPage.conversationsListModel = sqlModelHandler.conversationsListModel
         }
-
     }
 
     SplitView {
@@ -34,12 +35,17 @@ Rectangle {
         handle: Item {
             id: splitterHandle
             implicitWidth: 5
+
+            Rectangle {
+                color: Style.secondaryVariant
+                anchors.fill: parent
+            }
         }
 
         Rectangle {
             id: conversationsListPanel
             SplitView.preferredWidth: 300
-            SplitView.minimumWidth: 150
+            SplitView.minimumWidth: 200
             color: Style.surface
 
             ColumnLayout {
@@ -82,6 +88,7 @@ Rectangle {
                     Layout.fillWidth: true
                     clip: true
                     model: conversationsListModel
+                    currentIndex: 0
                     delegate: Rectangle {
                         id: conversationListDelegate
                         property bool selected: conversationIndex == index
@@ -115,6 +122,10 @@ Rectangle {
                                     conversationIndex = index
                                     highlight.visible = false
                                     highlight.width = parent.width * .5
+                                    currentContactNameText.text = name
+                                    currentContactPhoto.photoSource = photo
+                                    sqlModelHandler.setCurrentMessages(number)
+                                    currentMessagesListView.positionViewAtBeginning()
                                 }
                             }
                         }
@@ -141,8 +152,8 @@ Rectangle {
                             }
                         }
 
-                        Item {
-                            id: imageContainer
+                        ContactPhoto {
+                            id: contactPhoto
                             anchors.left: parent.left
                             anchors.top: parent.top
                             anchors.bottom: parent.bottom
@@ -150,65 +161,15 @@ Rectangle {
                             anchors.bottomMargin: 10
                             anchors.leftMargin: 10
                             width: height
-
-                            Rectangle {
-                                id: placeHolderImage
-                                anchors.fill: parent
-                                radius: 360
-                                color: Style.primary
-                                visible: contactImage.source == ""
-
-                                Image {
-                                    id: contactIcon
-                                    source: "../Images/icons/contact.svg"
-                                    anchors.fill: parent
-                                    anchors.margins: 5
-                                    sourceSize.height: height
-                                    sourceSize.width: width
-                                    fillMode: Image.PreserveAspectFit
-                                    visible: false
-                                    smooth: true
-                                    antialiasing: true
-                                }
-
-                                ColorOverlay {
-                                    z: 1
-                                    anchors.fill: contactIcon
-                                    source: contactIcon
-                                    color: Style.colorOnPrimary
-                                    antialiasing: true
-                                    smooth: true
-                                }
-                            }
-
-                            Image {
-                                id: contactImage
-                                source: ""
-                                anchors.fill: parent
-                                fillMode: Image.PreserveAspectCrop
-                                visible: true
-                                smooth: true
-                                antialiasing: true
-                                layer.enabled: true
-                                layer.effect: OpacityMask {
-                                    maskSource: mask
-                                }
-                            }
-
-                            Rectangle {
-                                id: mask
-                                anchors.fill: parent
-                                radius: 360
-                                visible: false
-                            }
+                            photoSource: photo
                         }
 
                         Item {
                             id: textContainer
-                            anchors.left: imageContainer.right
+                            anchors.left: contactPhoto.right
                             anchors.right: parent.right
                             height: contactNameText.height + lastMessageText.height
-                            anchors.verticalCenter: imageContainer.verticalCenter
+                            anchors.verticalCenter: contactPhoto.verticalCenter
                             anchors.margins: 10
                             property string allText: (contactNameText.text + lastMessageText.text).toLowerCase()
                             property color textColor: conversationListDelegate.selected ? Style.colorOnSecondary : Style.colorOnSurface
@@ -247,6 +208,310 @@ Rectangle {
             SplitView.preferredWidth: 500
             SplitView.minimumWidth: 300
             color: "transparent"
+
+            ColumnLayout {
+                id: columnLayout1
+                anchors.fill: parent
+                spacing: 0
+
+                Item {
+                    height: 50
+                    Layout.alignment: Qt.AlignLeft | Qt.AlignTop
+                    Layout.fillWidth: true
+
+                    Rectangle {
+                        id: currentConversationTopPanel
+                        anchors.fill: parent
+                        color: Style.surface
+
+                        ContactPhoto {
+                            id: currentContactPhoto
+                            photoSource: ""
+                            anchors.left: parent.left
+                            anchors.top: parent.top
+                            anchors.bottom: parent.bottom
+                            anchors.topMargin: 10
+                            anchors.bottomMargin: 10
+                            anchors.leftMargin: 15
+                            width: height
+                        }
+
+                        Label {
+                            id: currentContactNameText
+                            anchors.left: currentContactPhoto.right
+                            anchors.leftMargin: 10
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: conversationsListModel.get(conversationListView.currentIndex).name
+                            font.bold: true
+                            font.pixelSize: 15
+                            color: Style.colorOnSurface
+                        }
+                    }
+
+                    CustomDropShadow {
+                        source: currentConversationTopPanel
+                    }
+
+                }
+
+                SplitView {
+                    orientation: Qt.Vertical
+                    Layout.fillHeight: true
+                    Layout.fillWidth: true
+
+                    handle: Item {
+                        id: splitterHandle2
+                        implicitHeight: 5
+
+                        Rectangle {
+                            color: Style.secondaryVariant
+                            anchors.fill: parent
+                        }
+                    }
+
+                    Item {
+                        id: messagesPanel
+                        SplitView.fillHeight: true
+                        clip: true
+
+                        Column {
+                            id: column
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.bottom: parent.bottom
+                            anchors.topMargin: 15
+                            anchors.bottomMargin: 15
+                            anchors.rightMargin: 15
+                            anchors.leftMargin: 15
+
+                            ListView {
+                                id: currentMessagesListView
+                                anchors.fill: parent
+                                verticalLayoutDirection: ListView.BottomToTop
+                                spacing: 5
+                                model: currentMessagesListModel
+
+                                delegate: Column {
+                                    id: message
+                                    property bool sentByMe: type !== "Received"
+                                    anchors.right: sentByMe ? currentMessagesListView.contentItem.right : undefined
+                                    spacing: 6
+
+                                    Row {
+                                        id: messageRow
+                                        spacing: 6
+                                        anchors.right: sentByMe ? parent.right : undefined
+
+                                        Item {
+                                            id: contactPhotoContainer
+                                            height: 35
+                                            width: sentByMe ? 0 : height
+                                            anchors.verticalCenter: parent.verticalCenter
+
+                                            ContactPhoto {
+                                                property bool contactPhotoVisible: photoVisibilityHandler.photoVisible()
+                                                id: messageContactPhoto
+                                                anchors.fill: parent
+                                                visible: contactPhotoVisible
+                                                photoSource: photo
+                                            }
+
+                                            QtObject {
+                                                id: photoVisibilityHandler
+
+                                                function photoVisible() {
+                                                    if (message.sentByMe) {
+                                                        return false
+                                                    } else {
+                                                        if (index !== 0) {
+                                                            var nextMessageType = currentMessagesListModel.get(index - 1).type
+
+                                                            if (nextMessageType === "Received") {
+                                                                return false
+                                                            } else {
+                                                                return true
+                                                            }
+                                                        } else {
+                                                            return true
+                                                        }
+
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        Rectangle {
+                                            id: messageBubble
+                                            width: Math.min(messageText.implicitWidth + 24,
+                                                currentMessagesListView.width - (!sentByMe ? messageContactPhoto.width + messageRow.spacing : 0))
+                                            height: messageText.implicitHeight + 24
+                                            color: sentByMe ? Style.primary : Style.secondary
+                                            radius: 25
+
+                                            Label {
+                                                id: messageText
+                                                text: body
+                                                color: sentByMe ? Style.colorOnPrimary : Style.colorOnSecondary
+                                                anchors.fill: parent
+                                                anchors.margins: 12
+                                                wrapMode: Label.Wrap
+                                            }
+
+                                            MouseArea {
+                                                anchors.fill: parent
+
+                                                hoverEnabled: true
+
+                                                onContainsMouseChanged: {
+                                                    if (containsMouse) {
+                                                        cursorShape = Qt.PointingHandCursor
+                                                    } else {
+                                                        cursorShape = Qt.ArrowCursor
+                                                    }
+                                                }
+
+                                                onClicked: {
+                                                    timestampText.showTimestamp = !timestampText.showTimestamp
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    Label {
+                                        property bool showTimestamp: false
+                                        id: timestampText
+                                        text: time
+                                        horizontalAlignment: parent.sentByMe ? Text.AlignRight : Text.AlignLeft
+                                        color: Style.inactive
+                                        visible: showTimestamp
+                                        anchors.leftMargin: contactPhotoContainer.width + 6
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
+                                    }
+                                }
+                            }
+                        }
+
+                    }
+
+                    Item {
+                        id: composePanel
+                        SplitView.preferredHeight: 50
+                        SplitView.minimumHeight: 50
+
+                        Rectangle {
+                            anchors.fill: parent
+                            color: Style.primary
+
+                            Item {
+                                id: messageCompositionBar
+                                anchors.top: parent.top
+                                anchors.bottom: parent.bottom
+                                anchors.right: sendMessageBtn.left
+                                anchors.left: parent.left
+                                anchors.leftMargin: 15
+                                anchors.topMargin: 10
+                                anchors.bottomMargin: 10
+                                anchors.rightMargin: 10
+
+                                Rectangle {
+                                    id: compositionBG
+                                    color: Style.colorOnPrimary
+                                    anchors.fill: parent
+                                    clip: true
+                                    radius: 20
+
+                                    Label {
+                                        id: composeMessageText
+                                        text: "Compose Message..."
+                                        color: Style.inactive
+                                        anchors.left: parent.left
+                                        anchors.top: parent.top
+                                        anchors.leftMargin: 10
+                                        anchors.topMargin: 7
+
+                                        visible: messageCompositionEdit.text == ""
+                                    }
+
+                                    IconButton {
+                                        id: clearCompositionBtn
+                                        anchors.right: parent.right
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        anchors.rightMargin: 5
+                                        iconMargin: 3
+                                        height: 20
+                                        width: height
+                                        iconSource: "../Images/icons/clear.svg"
+                                        bgVisible: false
+                                        iconColor: Style.primaryVariant
+                                        z: 3
+                                        visible: messageCompositionEdit.text != ""
+
+                                        onClicked: messageCompositionEdit.text = ""
+                                    }
+
+                                    Flickable {
+                                        id: compositionFlickable
+                                        anchors.left: parent.left
+                                        anchors.top: parent.top
+                                        anchors.bottom: parent.bottom
+                                        anchors.right: clearCompositionBtn.right
+                                        anchors.topMargin: 7
+                                        anchors.rightMargin: 10
+                                        anchors.leftMargin: 10
+                                        contentHeight: messageCompositionEdit.height
+                                        contentWidth: width
+
+                                        function scrollToBottom() {
+                                            while (!compositionFlickable.atYEnd) {
+                                                compositionFlickable.contentY += .1
+                                            }
+                                        }
+
+
+                                        TextEdit {
+                                            id: messageCompositionEdit
+                                            anchors.top: parent.top
+                                            wrapMode: TextEdit.WordWrap
+                                            width: compositionFlickable.width
+                                            z: 2
+
+                                            onHeightChanged: {
+                                                compositionFlickable.scrollToBottom()
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            IconButton {
+                                id: sendMessageBtn
+                                anchors.right: parent.right
+                                anchors.top: parent.top
+                                anchors.rightMargin: 15
+                                anchors.topMargin: 5
+                                iconMargin: 5
+                                height: 40
+                                width: height
+                                iconSource: "../Images/icons/send.svg"
+                                bgVisible: false
+                                iconColor: messageCompositionEdit.text == "" ? Style.inactive : Style.colorOnPrimary
+                                enabled: messageCompositionEdit.text != ""
+
+                                onClicked: {
+                                    backend.sendMessage(selectedPhone,
+                                                        messageCompositionEdit.text,
+                                                        conversationsListModel.get(conversationListView.currentIndex).number)
+                                    messageCompositionEdit.text = ""
+                                }
+                            }
+                        }
+
+                    }
+
+                }
+            }
         }
     }
 }
