@@ -33,35 +33,47 @@ public class PermissionsActivity extends AppCompatActivity {
     // way so that they can be coded in dynamically as needed.
     private final ArrayList<Permission> mNeededPermissions = new ArrayList<Permission>() {{
         add(new Permission(
-                "Access SMS",
-                Manifest.permission.READ_SMS,
-                "SMS permission is needed to access contacts from PC.",
+                "Receive SMS",
+                Manifest.permission.RECEIVE_SMS,
+                "Receive SMS permission is needed to receive SMS from PC.",
                 true,
                 100));
+        add(new Permission(
+                "Send SMS",
+                Manifest.permission.SEND_SMS,
+                "Send SMS permission is needed to send SMS from PC.",
+                true,
+                101));
+        add(new Permission(
+                "Read SMS",
+                Manifest.permission.READ_SMS,
+                "Read SMS permission is needed to read SMS from PC.",
+                true,
+                102));
         add(new Permission(
                 "Access Contacts",
                 Manifest.permission.READ_CONTACTS,
                 "Contacts permission needed to access contacts from PC.",
                 true,
-                101));
+                103));
         add(new Permission(
                 "Access Call Logs",
                 Manifest.permission.READ_CALL_LOG,
                 "Call Logs permission needed to access call history from PC.",
                 true,
-                102));
+                104));
         add(new Permission(
                 "Handle Calls",
                 Manifest.permission.CALL_PHONE,
                 "Telephony permission needed to make calls from PC.",
                 true,
-                103));
+                105));
         add(new Permission(
                 "Notification Access",
                 Manifest.permission.ACCESS_NOTIFICATION_POLICY,
                 "Notification access needed to send notifications to PC.",
                 false,
-                104
+                106
         ));
     }};
 

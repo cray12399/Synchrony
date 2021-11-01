@@ -212,7 +212,8 @@ class MessagesSqlModel(QSqlQueryModel):
 
         current_messages = []
 
-        self.setQuery(f"SELECT * FROM sms WHERE number = {number}", db=db)
+        self.setQuery(f"SELECT * FROM sms WHERE number = {number} "
+                      f"ORDER BY date_sent DESC", db=db)
         row = 0
         while self.record(row).value('body') is not None:
             message = {
@@ -309,6 +310,7 @@ class SqlModelHandler(QObject):
         super().__init__(parent)
 
         self.__phone_dir = ''
+        self.__conversation_index = 0
 
         self.__calls_model = CallsSqlModel()
         self.__messages_model = MessagesSqlModel()
@@ -327,8 +329,8 @@ class SqlModelHandler(QObject):
 
     currentConversationListModel = Property(QObject, fget=get_current_conversation_list_model, constant=False)
 
-    def set_phone_dir(self, phone_dir):
-        self.__phone_dir = phone_dir
+    def update_models(self, name, address):
+        phone_dir = f'{utils.BASE_DIR}Phones/{name} ({address})'
 
         self.__calls_model.set_phone_dir(phone_dir)
         self.__messages_model.set_phone_dir(phone_dir)
@@ -340,7 +342,11 @@ class SqlModelHandler(QObject):
         self.__conversations_list_model.set_list_data(last_messages)
 
         if len(last_messages):
-            self.setCurrentMessages(last_messages[0]['number'])
+            self.setCurrentMessages(last_messages[self.__conversation_index]['number'])
+
+    @Slot(int)
+    def setConversationIndex(self, conversation_index):
+        self.__conversation_index = conversation_index
 
     @Slot(str)
     def setCurrentMessages(self, number):
@@ -366,11 +372,6 @@ class SqlModelHandler(QObject):
                 messages[message_index]['photo'] = "data:image/png;base64," + str(photo, 'utf-8') + ""
 
         return messages
-
-    def handle_selected_phone_change(self, selected_phone_data):
-        name = selected_phone_data['phone_name']
-        address = selected_phone_data['phone_address']
-        self.set_phone_dir(f'{utils.BASE_DIR}Phones/{name} ({address})')
 
     def get_num_unread_conversations(self):
         return self.__conversations_list_model.getNumUnread()

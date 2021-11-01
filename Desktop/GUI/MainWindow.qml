@@ -296,11 +296,8 @@ Window {
                 Rectangle {
                     id: rectangle
                     color: "transparent"
-                    anchors.top: parent.top
-                    anchors.bottom: parent.bottom
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    anchors.topMargin: 250
-                    anchors.bottomMargin: 250
+                    anchors.centerIn: parent
+                    height: 200
                     width:height
 
                     Image {

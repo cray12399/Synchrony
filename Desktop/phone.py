@@ -95,7 +95,7 @@ class Phone:
             # Once a complete stream of commands is obtained, split it by the command delimiter
             # and iterate over commands
             server_commands = server_commands.split(utils.COMMAND_DELIMITER)
-            self.__handle_commands(server_commands)
+            self.__handle_bluetooth_commands(server_commands)
 
         except bluetooth.btcommon.BluetoothError:
             self.__logger.exception("Error receiving incoming command from server!")
@@ -105,7 +105,7 @@ class Phone:
             self.__add_to_command_queue(gui.UPDATE_SOCKET_CONNECTION, json.dumps({'address': self.__address,
                                                                                   'btSocketConnected': False}))
 
-    def __handle_commands(self, server_commands):
+    def __handle_bluetooth_commands(self, server_commands):
         for server_command in server_commands:
             if server_command != "":
                 self.__logger.debug(f"Command received from device: {self.__name} ({self.__address}):"
@@ -193,6 +193,12 @@ class Phone:
                 syncing.Calls.delete_call_from_database(self.__directory, call_id)
                 self.__logger.info(f"Deleted entries for call id: {call_id} from calls!")
 
+            elif 'sync_complete' in server_command:
+                command = server_command.split(": ")[0]
+                device_address = server_command
+
+                self.__add_to_command_queue(command, device_address)
+
     def __handle_incoming_contact_photo_command(self, server_command):
         """Takes in server commands pertaining to the syncing of contact photos and either writes them
         to the database."""
@@ -233,6 +239,10 @@ class Phone:
 
     def get_logger(self):
         return self.__logger
+
+    def send_message(self, number, message):
+        self.__bluetooth_socket.send(
+            f"send_sms:: {json.dumps({'number': number, 'message': message})}" + utils.COMMAND_DELIMITER)
 
 
 def initialize_directory(name, address):

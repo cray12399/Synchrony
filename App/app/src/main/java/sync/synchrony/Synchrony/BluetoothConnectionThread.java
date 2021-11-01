@@ -16,6 +16,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.SystemClock;
 import android.provider.Telephony;
+import android.telephony.SmsManager;
 import android.telephony.TelephonyManager;
 import android.util.Log;
 import android.widget.Switch;
@@ -35,6 +36,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Objects;
@@ -341,22 +343,36 @@ class BluetoothConnectionThread extends Thread {
 
         // If the client sends a list of its currently synced contacts, pass them to the syncer.
         if (clientCommand.contains("have_contact_hashes:")) {
-            if (mSyncer != null) {
-                Gson gson = new Gson();
-                String jsonString = clientCommand.split(": ")[1];
-                HashMap<Long, Long> clientContacts = gson.fromJson(jsonString,
-                        new TypeToken<HashMap<Long, Long>>() {}.getType());
-                mSyncer.setClientContactHashes(clientContacts);
+            try {
+                if (mSyncer != null) {
+                    Gson gson = new Gson();
+                    String jsonString = clientCommand.split(": ")[1];
+                    HashMap<Long, Long> clientContacts = gson.fromJson(jsonString,
+                            new TypeToken<HashMap<Long, Long>>() {}.getType());
+                    mSyncer.setClientContactHashes(clientContacts);
+                }
+            } catch (Exception e) {
+                Log.e(TAG, String.format("handleCommand: " +
+                                "Error receiving contact hashes for device: %s!",
+                        mDeviceTag), e);
+                mSyncer.interrupt();
             }
 
         // If the client sends a list of its currently synced photos, pass them to the syncer.
         } else if (clientCommand.contains("have_contact_photo_hashes:")) {
-            if (mSyncer != null) {
-                Gson gson = new Gson();
-                String jsonString = clientCommand.split(": ")[1];
-                HashMap<Long, Long> clientPhotos = gson.fromJson(jsonString,
-                        new TypeToken<HashMap<Long, Long>>() {}.getType());
-                mSyncer.setClientContactPhotoHashes(clientPhotos);
+            try {
+                if (mSyncer != null) {
+                    Gson gson = new Gson();
+                    String jsonString = clientCommand.split(": ")[1];
+                    HashMap<Long, Long> clientPhotos = gson.fromJson(jsonString,
+                            new TypeToken<HashMap<Long, Long>>() {}.getType());
+                    mSyncer.setClientContactPhotoHashes(clientPhotos);
+                }
+            } catch (Exception e) {
+                Log.e(TAG, String.format("handleCommand: " +
+                                "Error receiving photo hashes for device: %s!",
+                        mDeviceTag), e);
+                mSyncer.interrupt();
             }
 
         // If the client sends a list of its currently synced messages, pass them to the syncer.
@@ -379,13 +395,22 @@ class BluetoothConnectionThread extends Thread {
 
         // If the client sends a list of its currently synced calls, pass them to the syncer.
         }  else if (clientCommand.contains("have_call_ids:")) {
-            if (mSyncer != null) {
-                Gson gson = new Gson();
-                String jsonString = clientCommand.split(": ")[1];
-                ArrayList<Long> clientCallIDs = gson.fromJson(jsonString,
-                        new TypeToken<ArrayList<Long>>() {}.getType());
-                mSyncer.setClientCallIds(clientCallIDs);
+            try {
+                if (mSyncer != null) {
+                    Gson gson = new Gson();
+                    String jsonString = clientCommand.split(": ")[1];
+                    ArrayList<Long> clientCallIDs = gson.fromJson(jsonString,
+                            new TypeToken<ArrayList<Long>>() {}.getType());
+                    mSyncer.setClientCallIds(clientCallIDs);
+                }
+            } catch (Exception e) {
+                Log.e(TAG, String.format("handleCommand: " +
+                                "Error receiving call id's for device: %s!",
+                        mDeviceTag), e);
+                mSyncer.interrupt();
             }
+
+        // If the client sends a clipboard.
         } else if (clientCommand.contains("incoming_clipboard:")) {
             System.out.println(clientCommand);
 
@@ -394,9 +419,26 @@ class BluetoothConnectionThread extends Thread {
             String clip_text = clientCommand.split(": ")[1];
             ClipData clip = ClipData.newPlainText("simple_text", clip_text);
             clipboard.setPrimaryClip(clip);
+
+        // If the client requests a sync.
         } else if (clientCommand.contains("do_sync")) {
             startSync(Syncer.SYNC_ALL);
+
+        // If the client tries to send a message.
+        } else if (clientCommand.contains("send_sms")) {
+            Gson gson = new Gson();
+            String jsonString = clientCommand.split(":: ")[1];
+            HashMap<String, String> command_data = gson.fromJson(jsonString,
+                    new TypeToken<HashMap<String, String>>() {}.getType());
+
+            SmsManager smsManager = SmsManager.getDefault();
+            smsManager.sendTextMessage(command_data.get("number"),
+                    null, command_data.get("message"),
+                    null, null);
         }
+
+
+
     }
 
     /** Sends a heartbeat to the client at a defined interval to track connection status. */

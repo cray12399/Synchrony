@@ -7,7 +7,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.database.Cursor;
 import android.net.Uri;
-import android.os.SystemClock;
 import android.provider.CallLog;
 import android.provider.ContactsContract;
 import android.provider.Telephony;
@@ -21,7 +20,6 @@ import com.google.gson.Gson;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Base64;
 import java.util.Calendar;
 import java.util.HashMap;
@@ -103,7 +101,7 @@ public class Syncer extends Thread {
         if (ContextCompat.checkSelfPermission(mContext, Manifest.permission.READ_CALL_LOG) ==
                 PermissionChecker.PERMISSION_GRANTED) {
             if (mToSync == SYNC_ALL || mToSync == SYNC_CALLS) {
-                new CallSync().syncCalls();
+                new CallsSync().syncCalls();
             }
         }
 
@@ -248,6 +246,10 @@ public class Syncer extends Thread {
                 ArrayList<Message> phoneMessages = getPhoneMessages();
                 sendMessages(phoneMessages);
                 deleteOldMessages(phoneMessages);
+
+                String btAddress = mBluetoothSocket.getRemoteDevice().getAddress();
+                BluetoothConnectionThread.sendCommand(
+                        mBluetoothSocket, "message_sync_complete: " + btAddress);
             }
         }
 
@@ -334,7 +336,7 @@ public class Syncer extends Thread {
         }
     }
 
-    private class CallSync {
+    private class CallsSync {
         private void syncCalls() {
             BluetoothConnectionThread.sendCommand(mBluetoothSocket,
                     "check_call_ids");
@@ -355,6 +357,10 @@ public class Syncer extends Thread {
                 ArrayList<Call> phoneCalls = getPhoneCalls();
                 sendPhoneCalls(phoneCalls);
                 deleteOldPhoneCalls(phoneCalls);
+
+                String btAddress = mBluetoothSocket.getRemoteDevice().getAddress();
+                BluetoothConnectionThread.sendCommand(
+                        mBluetoothSocket, "calls_sync_complete: " + btAddress);
             }
         }
 
@@ -593,6 +599,10 @@ public class Syncer extends Thread {
             if (!stopSync) {
                 sendContactsInfo(phoneContacts);
                 deleteOldContacts(phoneContacts);
+
+                String btAddress = mBluetoothSocket.getRemoteDevice().getAddress();
+                BluetoothConnectionThread.sendCommand(
+                        mBluetoothSocket, "contacts_sync_complete: " + btAddress);
             }
 
             BluetoothConnectionThread.sendCommand(mBluetoothSocket,
@@ -610,6 +620,10 @@ public class Syncer extends Thread {
 
             if (!stopSync) {
                 sendContactPhotos(phoneContacts);
+
+                String btAddress = mBluetoothSocket.getRemoteDevice().getAddress();
+                BluetoothConnectionThread.sendCommand(
+                        mBluetoothSocket, "contact_photo_sync_complete: " + btAddress);
             }
         }
 

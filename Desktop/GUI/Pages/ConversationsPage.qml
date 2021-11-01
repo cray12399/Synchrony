@@ -120,6 +120,7 @@ Rectangle {
                                     forceActiveFocus()
                                 } else {
                                     conversationIndex = index
+                                    sqlModelHandler.setConversationIndex(conversationIndex)
                                     highlight.visible = false
                                     highlight.width = parent.width * .5
                                     currentContactNameText.text = name
@@ -502,7 +503,7 @@ Rectangle {
                                 onClicked: {
                                     backend.sendMessage(selectedPhone,
                                                         messageCompositionEdit.text,
-                                                        conversationsListModel.get(conversationListView.currentIndex).number)
+                                                        conversationsListModel.get(conversationIndex).number)
                                     messageCompositionEdit.text = ""
                                 }
                             }

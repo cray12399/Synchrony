@@ -14,10 +14,15 @@ import traceback
 import pyclip
 import utils
 from data_models import PhoneDataModel, SqlModelHandler
+import backend
 
 INCOMING_PHONE_DATA = 'incoming_phone_data'
 REMOVE_PHONE_DATA = 'remove_phone_data'
 UPDATE_SOCKET_CONNECTION = 'update_socket_connection'
+MESSAGE_SYNC_COMPLETE = 'message_sync_complete'
+CALLS_SYNC_COMPLETE = 'calls_sync_complete'
+CONTACTS_SYNC_COMPLETE = 'contacts_sync_complete'
+CONTACT_PHOTO_SYNC_COMPLETE = 'contact_photo_sync_complete'
 
 
 class MainWindow(QObject):
@@ -30,6 +35,7 @@ class MainWindow(QObject):
         super().__init__(None)
 
         self.__phone_data_model = PhoneDataModel()
+        self.__selected_phone_data = None
         self.__sql_model_handler = SqlModelHandler()
         self.__backend_socket = backend_socket
         self.__thread_pool = QThreadPool(self)
@@ -46,7 +52,17 @@ class MainWindow(QObject):
         self.__looper_thread.add_phone_data_signal.connect(self.__add_phone_data)
         self.__looper_thread.remove_phone_data_signal.connect(self.__remove_phone_data)
         self.__looper_thread.update_bt_socket_signal.connect(self.__update_socket_connection)
+        self.__looper_thread.calls_sync_complete.connect(None)
+        self.__looper_thread.contacts_sync_complete.connect(None)
+        self.__looper_thread.message_sync_complete.connect(lambda: self.__update_gui(
+            self.__selected_phone_data['name'],
+            self.__selected_phone_data['address']))
+        self.__looper_thread.contact_photo_sync_complete.connect(None)
         self.__looper_thread.start()
+
+    def __update_gui(self, name, address):
+        self.__sql_model_handler.update_models(name, address)
+        self.update_num_new_messages(self.__sql_model_handler.get_num_unread_conversations())
 
     def get_phone_data_model(self):
         return self.__phone_data_model
@@ -61,9 +77,15 @@ class MainWindow(QObject):
     @Slot('QVariant')
     def selectedPhoneChanged(self, selected_phone_data):
         if selected_phone_data is not None:
-            selected_phone_data = {'phone_name': selected_phone_data.property('name').toString(),
-                                   'phone_address': selected_phone_data.property('address').toString()}
-            self.__sql_model_handler.handle_selected_phone_change(selected_phone_data)
+            selected_phone_data = {
+                'name': selected_phone_data.property('name').toString(),
+                'address': selected_phone_data.property('address').toString()
+            }
+            self.__selected_phone_data = selected_phone_data
+
+            self.__sql_model_handler.update_models(selected_phone_data['name'],
+                                                   selected_phone_data['address'])
+
             self.setNumNewMessages.emit(self.__sql_model_handler.get_num_unread_conversations())
 
     @Slot('QVariant')
@@ -104,11 +126,17 @@ class MainWindow(QObject):
 
     @Slot('QVariant', str, str)
     def sendMessage(self, selected_phone_data, message, recipient_number):
-        # selected_phone_data = {'phone_name': selected_phone_data.property('name').toString(),
-        #                        'phone_address': selected_phone_data.property('address').toString()}
-        print(selected_phone_data)
-        print(message)
-        print(recipient_number)
+        selected_phone_data = {'phone_name': selected_phone_data.property('name').toString(),
+                               'phone_address': selected_phone_data.property('address').toString()}
+
+        command_data = {
+            'selected_phone': selected_phone_data,
+            'number': recipient_number,
+            'message': message
+        }
+
+        self.run_in_background(send_gui_command, self.__backend_socket,
+                               f"{backend.SEND_SMS}: {json.dumps(command_data)}")
 
     def __add_phone_data(self, phone_data):
         """Updates the phone connection data list and updates GUI phone data."""
@@ -143,6 +171,10 @@ class LooperThread(QThread):
     add_phone_data_signal = Signal(dict)  # Signal sends list of phone connections to GUI.
     remove_phone_data_signal = Signal(str)  # Signal sends address of phone data to remove.
     update_bt_socket_signal = Signal(dict)
+    calls_sync_complete = Signal()
+    message_sync_complete = Signal()
+    contact_photo_sync_complete = Signal()
+    contacts_sync_complete = Signal()
 
     def __init__(self, backend_socket, parent=None):
         QThread.__init__(self, parent)
@@ -212,6 +244,14 @@ class LooperThread(QThread):
         elif UPDATE_SOCKET_CONNECTION in command:
             command_data = json.loads(command[len(f'{UPDATE_SOCKET_CONNECTION}: '):])
             self.update_bt_socket_signal.emit(command_data)
+        elif MESSAGE_SYNC_COMPLETE in command:
+            self.message_sync_complete.emit()
+        elif CONTACTS_SYNC_COMPLETE in command:
+            self.contacts_sync_complete.emit()
+        elif CONTACT_PHOTO_SYNC_COMPLETE in command:
+            self.contact_photo_sync_complete.emit()
+        elif CALLS_SYNC_COMPLETE in command:
+            self.calls_sync_complete.emit()
 
 
 class Worker(QRunnable):

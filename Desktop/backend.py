@@ -12,6 +12,7 @@ LOG = 'log'
 SEND_FILE = 'send_file'
 SEND_CLIPBOARD = 'send_clipboard'
 DO_SYNC = 'do_sync'
+SEND_SMS = 'send_sms'
 
 
 class Backend:
@@ -72,6 +73,7 @@ class Backend:
                 self.__phone_connections.pop(address)
                 self.__remove_phone_data_from_gui(address)
 
+        # Handle commands from phones
         for phone in self.__phone_connections.values():
             for command_index in range(len(phone.get_command_queue())):
                 if command_index < len(phone.get_command_queue()):
@@ -217,6 +219,15 @@ class Backend:
             elif DO_SYNC in command:
                 command_data = json.loads(command[len(f"{DO_SYNC}: "):])
                 self.__do_sync(command_data)
+            elif SEND_SMS in command:
+                command_data = json.loads(command[len(f"{DO_SYNC}: "):])
+                phone_address = command_data['selected_phone']['phone_address']
+                number = command_data['number']
+                message = command_data['message']
+
+                phone = self.__phone_connections.get(phone_address)
+                phone.send_message(number, message)
+
         except:
             self.__logger.exception(f"Exception raised when handling GUI command: {command}")
 
